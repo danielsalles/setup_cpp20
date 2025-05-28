@@ -111,20 +111,13 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# 📦 Package manager integration
-if(DEFINED CMAKE_TOOLCHAIN_FILE)
-    message(STATUS "📦 Using toolchain: \${CMAKE_TOOLCHAIN_FILE}")
-endif()
-
 # 🔧 Compiler configurations
 include(cmake/CompilerWarnings.cmake)
 include(cmake/StaticAnalysis.cmake)
 
-# 📦 vcpkg helper functions
-if($USE_VCPKG)
+# 📦 Package manager integration
 include(cmake/VcpkgHelpers.cmake)
 vcpkg_find_packages()
-endif()
 
 # 🎯 Build options
 option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
@@ -132,7 +125,6 @@ option(ENABLE_TESTING "Enable testing" ${USE_TESTING})
 option(ENABLE_BENCHMARKS "Enable benchmarks" OFF)
 
 # 📚 Find packages
-if($USE_VCPKG)
 # Note: vcpkg_find_packages() above should have found these automatically
 # These are fallback manual find_package calls
 find_package(fmt CONFIG QUIET)
@@ -144,7 +136,6 @@ if(NOT fmt_FOUND)
 endif()
 if(NOT spdlog_FOUND)
     message(WARNING "spdlog package not found - install with: vcpkg install spdlog")
-endif()
 endif()
 
 CMAKE_EOF
@@ -163,9 +154,7 @@ target_include_directories(\${PROJECT_NAME} PRIVATE
     include
 )
 
-if($USE_VCPKG)
 vcpkg_link_libraries(\${PROJECT_NAME} PRIVATE)
-endif()
 
 apply_compiler_warnings(\${PROJECT_NAME})
 
@@ -188,9 +177,7 @@ target_include_directories(\${PROJECT_NAME}
         src
 )
 
-if($USE_VCPKG)
 vcpkg_link_libraries(\${PROJECT_NAME} PUBLIC)
-endif()
 
 apply_compiler_warnings(\${PROJECT_NAME})
 
@@ -308,8 +295,7 @@ endif()
 ANALYSIS_EOF
     
     # vcpkg helper functions
-    if [[ "$USE_VCPKG" == "true" ]]; then
-        cat > cmake/VcpkgHelpers.cmake << 'VCPKG_HELPERS_EOF'
+    cat > cmake/VcpkgHelpers.cmake << 'VCPKG_HELPERS_EOF'
 # 📦 vcpkg Helper Functions
 # Automatically finds and links packages from vcpkg.json
 
@@ -666,7 +652,6 @@ function(vcpkg_add_package_mapping PACKAGE_NAME FIND_NAME TARGET_NAME)
 endfunction()
 
 VCPKG_HELPERS_EOF
-    fi
     
     log_success "CMake configuration created"
 }
@@ -934,32 +919,27 @@ endif()
 # Test executable
 add_executable(${PROJECT_NAME}_tests
     test_main.cpp
-TEST_CMAKE_EOF
-
-        if [[ "$PROJECT_TYPE" == "library" ]]; then
-            echo "    test_${PROJECT_NAME}.cpp" >> tests/CMakeLists.txt
-        fi
-
-        cat >> tests/CMakeLists.txt << TEST_CMAKE_EOF2
+    test_${PROJECT_NAME}.cpp
 )
 
 target_link_libraries(${PROJECT_NAME}_tests PRIVATE
     Catch2::Catch2WithMain
-TEST_CMAKE_EOF2
-
-        if [[ "$PROJECT_TYPE" == "library" ]]; then
-            echo "    ${PROJECT_NAME}" >> tests/CMakeLists.txt
-        fi
-
-        cat >> tests/CMakeLists.txt << TEST_CMAKE_EOF3
 )
+
+# Link library for library projects
+if [[ "$PROJECT_TYPE" == "library" ]]; then
+    cat >> tests/CMakeLists.txt << TEST_LIBRARY_LINK_EOF
+
+target_link_libraries(${PROJECT_NAME}_tests PRIVATE ${PROJECT_NAME})
+TEST_LIBRARY_LINK_EOF
+fi
 
 # Enable testing
 include(CTest)
 
 # Add test manually (simple and reliable approach)
 add_test(NAME ${PROJECT_NAME}_tests COMMAND ${PROJECT_NAME}_tests)
-TEST_CMAKE_EOF3
+TEST_CMAKE_EOF
         
         # Test main file
         cat > tests/test_main.cpp << TEST_MAIN_EOF
@@ -1167,7 +1147,6 @@ CMAKE_ARGS=(
 # Add vcpkg toolchain if available
 if [[ -n "${VCPKG_ROOT:-}" ]] && [[ -f "$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" ]]; then
     CMAKE_ARGS+=(-DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake")
-    CMAKE_ARGS+=(-DUSE_VCPKG=ON)
     log_info "Using vcpkg toolchain"
     
     # Install vcpkg dependencies if vcpkg.json exists
