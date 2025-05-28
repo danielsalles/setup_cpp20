@@ -190,6 +190,22 @@ check_cmake_integration() {
         log_warning "VcpkgHelpers.cmake not found"
     fi
     
+    # Check test configuration
+    if [[ -f "tests/CMakeLists.txt" ]]; then
+        log_success "Found tests/CMakeLists.txt"
+        
+        if grep -q "catch_discover_tests" tests/CMakeLists.txt; then
+            log_warning "tests/CMakeLists.txt uses catch_discover_tests (may cause issues)"
+            log_info "Consider using simple add_test() instead"
+        elif grep -q "add_test" tests/CMakeLists.txt; then
+            log_success "tests/CMakeLists.txt uses add_test() (recommended)"
+        fi
+        
+        if grep -q "include(Catch)" tests/CMakeLists.txt; then
+            log_warning "tests/CMakeLists.txt includes Catch module (may cause issues)"
+        fi
+    fi
+    
     echo
 }
 
@@ -217,6 +233,11 @@ suggest_fixes() {
     echo "5. 🔍 Check package names:"
     echo "   vcpkg search fmt"
     echo "   vcpkg search spdlog"
+    echo
+    echo "6. 🧪 Fix test configuration issues:"
+    echo "   Replace catch_discover_tests() with add_test() in tests/CMakeLists.txt"
+    echo "   Remove include(Catch) if causing problems"
+    echo "   Use simple: add_test(NAME my_tests COMMAND my_tests)"
     echo
 }
 

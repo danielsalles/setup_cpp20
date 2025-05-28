@@ -954,10 +954,11 @@ TEST_CMAKE_EOF2
         cat >> tests/CMakeLists.txt << TEST_CMAKE_EOF3
 )
 
-# Discover tests
+# Enable testing
 include(CTest)
-include(Catch)
-catch_discover_tests(${PROJECT_NAME}_tests)
+
+# Add test manually (simple and reliable approach)
+add_test(NAME ${PROJECT_NAME}_tests COMMAND ${PROJECT_NAME}_tests)
 TEST_CMAKE_EOF3
         
         # Test main file
