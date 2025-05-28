@@ -901,7 +901,7 @@ create_test_files() {
         log_header "Creating Test Files"
         
         # Test CMakeLists.txt
-        cat > tests/CMakeLists.txt << TEST_CMAKE_EOF
+        cat > tests/CMakeLists.txt << 'TEST_CMAKE_EOF'
 # 🧪 Testing configuration
 find_package(Catch2 3 QUIET)
 
@@ -926,20 +926,20 @@ target_link_libraries(${PROJECT_NAME}_tests PRIVATE
     Catch2::Catch2WithMain
 )
 
-# Link library for library projects
-if [[ "$PROJECT_TYPE" == "library" ]]; then
-    cat >> tests/CMakeLists.txt << TEST_LIBRARY_LINK_EOF
-
-target_link_libraries(${PROJECT_NAME}_tests PRIVATE ${PROJECT_NAME})
-TEST_LIBRARY_LINK_EOF
-fi
-
 # Enable testing
 include(CTest)
 
 # Add test manually (simple and reliable approach)
 add_test(NAME ${PROJECT_NAME}_tests COMMAND ${PROJECT_NAME}_tests)
 TEST_CMAKE_EOF
+
+        # Link library for library projects
+        if [[ "$PROJECT_TYPE" == "library" ]]; then
+            cat >> tests/CMakeLists.txt << 'TEST_LIBRARY_LINK_EOF'
+
+target_link_libraries(${PROJECT_NAME}_tests PRIVATE ${PROJECT_NAME})
+TEST_LIBRARY_LINK_EOF
+        fi
         
         # Test main file
         cat > tests/test_main.cpp << TEST_MAIN_EOF
