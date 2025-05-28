@@ -1181,6 +1181,7 @@ fi
 log_success "Build completed successfully!"
 
 # Show binary info
+PROJECT_NAME=$(basename "$(pwd)")
 if [[ -f "build/${PROJECT_NAME}" ]]; then
     echo
     log_info "Binary information:"
