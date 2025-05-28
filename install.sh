@@ -206,45 +206,7 @@ EOF
     return 0
 }
 
-create_first_project() {
-    log_header "Step 4: Create Your First Project (Optional)"
-    
-    echo -e "${CYAN}Create a sample C++20 project to test your setup${NC}"
-    echo
-    
-    read -p "Create a sample project? (Y/n): " -n 1 -r
-    echo
-    
-    if [[ $REPLY =~ ^[Nn]$ ]]; then
-        log_info "Skipping project creation"
-        return 1
-    fi
-    
-    read -p "Project name (default: hello-cpp20): " project_name
-    project_name="${project_name:-hello-cpp20}"
-    
-    echo "Project types:"
-    echo "1. Console application (default)"
-    echo "2. Static/shared library"
-    echo "3. GUI application"
-    
-    read -p "Choose type (1-3): " -n 1 -r
-    echo
-    
-    local project_type="console"
-    case $REPLY in
-        2) project_type="library" ;;
-        3) project_type="gui" ;;
-    esac
-    
-    download_and_run "create-cpp20-project.sh" "$project_name $project_type"
-    
-    log_success "Project '$project_name' created!"
-    log_info "Next steps:"
-    log_info "  cd $project_name"
-    log_info "  ./scripts/build.sh"
-    return 0
-}
+
 
 show_completion() {
     log_header "🎉 Setup Complete!"
@@ -356,7 +318,6 @@ interactive_wizard() {
     local env_setup=false
     local project_setup=false
     local vcpkg_setup=false
-    local sample_project=false
     
     log_info "Welcome to the C++20 Development Setup Wizard!"
     echo
@@ -377,13 +338,6 @@ interactive_wizard() {
     if setup_vcpkg_helper; then
         vcpkg_setup=true
         echo
-    fi
-    
-    # Step 4: Sample Project
-    if [[ "$env_setup" == true ]] && [[ "$project_setup" == true ]]; then
-        if create_first_project; then
-            sample_project=true
-        fi
     fi
     
     echo

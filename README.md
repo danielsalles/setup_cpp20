@@ -72,7 +72,6 @@ The wizard guides you through:
 1. **Environment Setup**: Essential tools and compilers
 2. **Project Creator**: cpp-new command setup
 3. **Package Helper**: vcpkg-helper tools
-4. **Sample Project**: Optional first project creation
 
 ### **Automated Options**
 ```bash
