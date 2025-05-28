@@ -917,32 +917,39 @@ if(NOT Catch2_FOUND)
 endif()
 
 # Test executable
-add_executable(${PROJECT_NAME}_tests
-    test_main.cpp
-    test_${PROJECT_NAME}.cpp
-)
+TEST_CMAKE_EOF
 
-target_link_libraries(${PROJECT_NAME}_tests PRIVATE
-    Catch2::Catch2WithMain
-)
-
+        # Add the test executable with project-specific name
+        echo "add_executable(${PROJECT_NAME}_tests" >> tests/CMakeLists.txt
+        echo "    test_main.cpp" >> tests/CMakeLists.txt
+        echo "    test_${PROJECT_NAME}.cpp" >> tests/CMakeLists.txt
+        echo ")" >> tests/CMakeLists.txt
+        echo "" >> tests/CMakeLists.txt
+        
+        # Add target link libraries
+        echo "target_link_libraries(${PROJECT_NAME}_tests PRIVATE" >> tests/CMakeLists.txt
+        echo "    Catch2::Catch2WithMain" >> tests/CMakeLists.txt
+        
+        # Link library for library projects
+        if [[ "$PROJECT_TYPE" == "library" ]]; then
+            echo "    ${PROJECT_NAME}" >> tests/CMakeLists.txt
+        fi
+        
+        echo ")" >> tests/CMakeLists.txt
+        echo "" >> tests/CMakeLists.txt
+        
+        # Add the rest of the CMake configuration
+        cat >> tests/CMakeLists.txt << 'TEST_CMAKE_EOF2'
 # Enable testing
 include(CTest)
 
 # Add test manually (simple and reliable approach)
-add_test(NAME ${PROJECT_NAME}_tests COMMAND ${PROJECT_NAME}_tests)
-TEST_CMAKE_EOF
+TEST_CMAKE_EOF2
 
-        # Link library for library projects
-        if [[ "$PROJECT_TYPE" == "library" ]]; then
-            cat >> tests/CMakeLists.txt << 'TEST_LIBRARY_LINK_EOF'
-
-target_link_libraries(${PROJECT_NAME}_tests PRIVATE ${PROJECT_NAME})
-TEST_LIBRARY_LINK_EOF
-        fi
+        echo "add_test(NAME ${PROJECT_NAME}_tests COMMAND ${PROJECT_NAME}_tests)" >> tests/CMakeLists.txt
         
         # Test main file
-        cat > tests/test_main.cpp << TEST_MAIN_EOF
+        cat > tests/test_main.cpp << 'TEST_MAIN_EOF'
 #include <catch2/catch_test_macros.hpp>
 
 // This file can be used for global test setup if needed
