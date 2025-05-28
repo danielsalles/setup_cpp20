@@ -1,337 +1,420 @@
-# C++20 Modern Development Environment Setup for macOS
+# 🚀 Ultimate C++20 Development Environment
 
-This script automatically configures a complete modern C++20 development environment on macOS with essential tools, package managers, and convenient aliases.
+**The most complete and modern C++20 development setup for macOS and Linux.**
 
-## 🚀 What This Setup Does
+Stop wasting time configuring your C++ environment. Get productive in **minutes**, not hours.
 
-### 1. **Package Manager Installation**
-- Installs **Homebrew** (if not already present) - the essential package manager for macOS
+## ✨ What This Does
 
-### 2. **Development Tools Installation**
-- **CMake**: Cross-platform build system generator
-- **Ninja**: Fast build system
-- **pkg-config**: Tool for managing compilation flags and library dependencies
-- **LLVM**: Modern Clang compiler with C++20 support
-- **GCC**: GNU Compiler Collection as alternative
-
-### 3. **Convenient Aliases Configuration**
-Adds useful aliases to your `~/.zshrc`:
-- `cpp20`: Basic C++20 compilation with Clang
-- `cpp20-debug`: Debug build with warnings enabled
-- `cpp20-release`: Optimized release build
-- `cpprun()`: Function to quickly compile and run C++ files
-
-### 4. **Package Managers Setup**
-- **vcpkg**: Microsoft's C++ package manager
-  - Clones official repository to `~/vcpkg`
-  - Configures IDE integration
-- **Conan**: Popular C++ package manager
-  - Installs via pip3
-  - Auto-detects system profile
-
-## 📋 Prerequisites
-
-- macOS (any recent version)
-- Internet connection
-- Terminal access
-- Python 3 (usually pre-installed on macOS)
-
-## 🔧 How to Execute
-
-### Option 1: Direct Execution
-```bash
-# Make the script executable
-chmod +x install_cpp20_macOS.sh
-
-# Run the script
-./install_cpp20_macOS.sh
-```
-
-### Option 2: Download and Run
-```bash
-# If downloading from a repository
-curl -O https://your-repo/install_cpp20_macOS.sh
-chmod +x install_cpp20_macOS.sh
-./install_cpp20_macOS.sh
-```
-
-### Option 3: Run with Bash
-```bash
-bash install_cpp20_macOS.sh
-```
-
-## ⚡ Quick Start After Installation
-
-1. **Restart your terminal** or run:
-   ```bash
-   source ~/.zshrc
-   ```
-
-2. **Test your installation**:
-   ```bash
-   cpp20 --version
-   cmake --version
-   conan --version
-   ```
-
-3. **Quick compile and run example**:
-   ```bash
-   # Create a simple C++20 file
-   echo '#include <iostream>
-   int main() {
-       std::cout << "Hello C++20!" << std::endl;
-       return 0;
-   }' > hello.cpp
-   
-   # Compile and run
-   cpprun hello.cpp
-   ```
-
-## 🛠️ Available Commands After Setup
-
-| Command | Description |
-|---------|-------------|
-| `cpp20 file.cpp` | Basic C++20 compilation |
-| `cpp20-debug file.cpp` | Debug build with warnings |
-| `cpp20-release file.cpp` | Optimized release build |
-| `cpprun file.cpp` | Compile and run immediately |
-
-## 📚 Package Management
-
-### Using vcpkg
-```bash
-cd ~/vcpkg
-./vcpkg search [package-name]
-./vcpkg install [package-name]
-
-# For CMake integration
-cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=~/vcpkg/scripts/buildsystems/vcpkg.cmake
-```
-
-### Using Conan
-```bash
-conan search [package-name]
-conan install [package-name]
-
-# For CMake integration
-conan install . --build=missing
-cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake
-```
-
-## 🏗️ Modern CMakeLists.txt Template
-
-This repository includes a modern `CMakeLists.txt` template that demonstrates:
-
-### ✨ Modern Features
-- **C++20 Standard**: Enforced with no extensions
-- **Cross-platform**: macOS, Linux, and Windows support
-- **Package Manager Integration**: Ready for vcpkg and Conan
-- **Security Hardening**: Stack protection and fortification
-- **IDE Support**: Export compile commands for better IDE integration
-- **Build System Optimization**: Ninja build system detection
-
-### 🎯 Key Highlights
-- Uses target-based modern CMake (3.25+)
-- Compiler-specific optimizations for Clang, GCC, and MSVC
-- Matches the aliases created by our setup script
-- Security flags for production builds
-- Comprehensive warning flags for better code quality
-
-### 🔧 How to Use the CMakeLists.txt Template
-
-#### For a New Project:
-1. **Copy the template**:
-   ```bash
-   cp CMakeLists.txt /path/to/your/new/project/
-   ```
-
-2. **Customize for your project**:
-   ```cmake
-   # Change project name and details
-   project(YourProjectName
-       VERSION 1.0.0
-       DESCRIPTION "Your project description"
-       LANGUAGES CXX
-   )
-   
-   # Update executable name and source files
-   add_executable(${PROJECT_NAME} 
-       src/main.cpp
-       src/other_file.cpp
-   )
-   ```
-
-3. **Build your project**:
-   ```bash
-   mkdir build && cd build
-   cmake -G Ninja ..
-   ninja
-   ```
-
-#### For Library Projects:
-```cmake
-# Instead of add_executable, use:
-add_library(${PROJECT_NAME} 
-    src/library.cpp
-    include/library.hpp
-)
-
-# Add include directories
-target_include_directories(${PROJECT_NAME} 
-    PUBLIC include
-    PRIVATE src
-)
-```
-
-#### Adding Dependencies:
-```cmake
-# vcpkg example
-find_package(fmt CONFIG REQUIRED)
-target_link_libraries(${PROJECT_NAME} PRIVATE fmt::fmt)
-
-# Conan example (after conan install)
-find_package(Boost REQUIRED)
-target_link_libraries(${PROJECT_NAME} PRIVATE Boost::Boost)
-```
-
-## 🔒 Security Notes
-
-- ✅ Uses official sources (Homebrew, Microsoft vcpkg, Conan PyPI)
-- ✅ No elevated privileges required
-- ✅ Only appends to `~/.zshrc` (doesn't overwrite)
-- ✅ Checks for existing installations before proceeding
-
-## 🎯 Perfect For
-
-- Modern C++20 development
-- Cross-platform C++ projects
-- Learning C++20 features
-- Professional C++ development
-- Open source C++ contributions
-
-## 📝 What Gets Modified
-
-- Installs packages via Homebrew
-- Adds aliases to `~/.zshrc`
-- Creates `~/vcpkg` directory
-- Installs Conan via pip3
-
-## 🆘 Troubleshooting
-
-If you encounter issues:
-
-1. **Homebrew installation fails**: Check your internet connection and try again
-2. **Permission errors**: Ensure you're not running as root
-3. **Aliases not working**: Run `source ~/.zshrc` or restart terminal
-4. **vcpkg issues**: Check if Git is installed (`brew install git`)
-
-## 🔄 Uninstalling
-
-To remove components installed by this script:
-```bash
-# Remove Homebrew packages
-brew uninstall cmake ninja pkg-config llvm gcc
-
-# Remove vcpkg
-rm -rf ~/vcpkg
-
-# Remove Conan
-pip3 uninstall conan
-
-# Remove aliases (manually edit ~/.zshrc)
-```
-
-## 🔨 Smart Build Script
-
-This repository includes a powerful `build.sh` script that simplifies the build process:
-
-### ✨ Features
-- **Intelligent Defaults**: Auto-detects CPU cores, uses Clang by default
-- **Package Manager Integration**: Built-in support for vcpkg and Conan
-- **Error Handling**: Strict error checking with helpful messages
-- **Cross-Platform**: Works on macOS, Linux, and Windows (with WSL)
-- **Flexible Options**: Multiple build types, compilers, and configurations
-
-### 🚀 Quick Usage
-```bash
-# Make executable (first time only)
-chmod +x build.sh
-
-# Quick release build
-./build.sh
-
-# Debug build and run
-./build.sh -t Debug -r
-
-# Clean build with vcpkg
-./build.sh --clean --vcpkg
-
-# Verbose build with Conan using 8 jobs
-./build.sh --conan -v -j 8
-```
-
-### 📋 Available Options
-| Option | Description | Default |
-|--------|-------------|---------|
-| `-t, --type` | Build type (Debug, Release, RelWithDebInfo) | Release |
-| `-c, --compiler` | Compiler (clang++, g++) | clang++ |
-| `--clean` | Clean build directory first | false |
-| `-r, --run` | Run executable after building | false |
-| `-v, --verbose` | Verbose build output | false |
-| `--vcpkg` | Use vcpkg for dependencies | false |
-| `--conan` | Use Conan for dependencies | false |
-| `-j, --jobs` | Number of parallel jobs | auto-detected |
-
-### 🛡️ Safety Features
-- **Dependency Checks**: Verifies all required tools are installed
-- **Error Handling**: Stops on first error with clear messages
-- **Input Validation**: Validates build types and options
-- **Tool Detection**: Checks for CMake, Ninja, and compilers
-
-## 📁 Repository Structure
-
-This repository serves as a **reference and template** for modern C++20 development:
-
-```
-setup-c++20/
-├── install_cpp20_macOS.sh    # Setup script for macOS
-├── build.sh                  # Smart build script
-├── CMakeLists.txt            # Modern CMake template
-├── modern_cpp20_demo.cpp     # C++20 features demonstration
-└── README.md                 # This documentation
-```
-
-### 🎯 Purpose of Each File
-
-- **`install_cpp20_macOS.sh`**: Complete environment setup script
-- **`build.sh`**: Smart build script with package manager integration
-- **`CMakeLists.txt`**: Production-ready CMake template with modern practices
-- **`modern_cpp20_demo.cpp`**: Demonstration of C++20 features (Concepts, Ranges, Format)
-- **`README.md`**: Comprehensive documentation and usage guide
-
-### 🎮 Try the Demo
-
-The included `modern_cpp20_demo.cpp` showcases modern C++20 features:
-
-- **Concepts**: Type constraints for template parameters
-- **Ranges**: Functional programming with views and transformations
-- **Format Library**: Modern string formatting (when available)
-- **Platform Detection**: CMake-based conditional compilation
-
-```bash
-# Build and run the demo
-./build.sh -r
-
-# Expected output shows C++20 features in action
-```
-
-### 💡 How to Use This Repository
-
-1. **For Environment Setup**: Run the installation script
-2. **For New Projects**: Copy and customize the CMakeLists.txt
-3. **For Reference**: Use this README as a quick reference guide
-4. **For Learning**: Study the modern CMake practices implemented
+🎯 **One-Command Setup**: Complete C++20 environment in under 5 minutes  
+📦 **Modern Package Management**: vcpkg with npm-like experience  
+🏗️ **Project Templates**: Console apps, libraries, and GUI applications  
+🔧 **Development Tools**: CMake, Ninja, Clang with C++20 support  
+🧪 **Testing Ready**: Catch2 integration and modern CMake patterns  
+📚 **Best Practices**: Modern C++20 features and examples  
 
 ---
 
-**Ready to start your modern C++20 journey!** 🚀 
+## 🚀 Quick Start
+
+### **Complete Setup**
+```bash
+curl -fsSL https://raw.githubusercontent.com/danielsalles/setup_cpp20/main/install.sh | bash
+```
+
+### **Create Your First Project**
+```bash
+# After setup, restart your terminal, then:
+cpp-new my-awesome-project console
+
+# Build and run
+cd my-awesome-project
+./scripts/build.sh
+```
+
+**That's it!** You now have a complete C++20 development environment.
+
+---
+
+## 📋 What Gets Installed
+
+### **🔧 Development Environment**
+- ✅ **CMake 3.25+**: Modern build system generator
+- ✅ **Ninja**: Ultra-fast build system  
+- ✅ **LLVM/Clang**: Latest C++20 compiler
+- ✅ **GCC**: Alternative compiler
+- ✅ **vcpkg**: Microsoft's C++ package manager
+- ✅ **jq**: JSON processor for package management
+
+### **🏗️ Project Creation Tool**
+- ✅ **cpp-new command**: Create projects instantly
+- ✅ **Modern Templates**: Console, library, GUI projects
+- ✅ **CMake Best Practices**: Target-based configuration
+- ✅ **vcpkg Integration**: Automatic package discovery
+- ✅ **Testing Framework**: Catch2 setup included
+
+### **📦 Package Management Helper**
+- ✅ **vcpkg-helper**: npm-like package management
+- ✅ **Smart Commands**: add, remove, list, search packages
+- ✅ **Auto vcpkg.json**: Automatic manifest management
+- ✅ **Convenient Aliases**: vcpkg-add, vcpkg-list shortcuts
+
+---
+
+## 🔄 Installation Options
+
+### **Interactive Wizard (Recommended)**
+```bash
+curl -fsSL https://raw.githubusercontent.com/danielsalles/setup_cpp20/main/install.sh | bash
+```
+
+The wizard guides you through:
+1. **Environment Setup**: Essential tools and compilers
+2. **Project Creator**: cpp-new command setup
+3. **Package Helper**: vcpkg-helper tools
+4. **Sample Project**: Optional first project creation
+
+### **Automated Options**
+```bash
+# Complete setup (all components)
+curl -fsSL https://raw.githubusercontent.com/danielsalles/setup_cpp20/main/install.sh | bash -s -- --all
+
+# Environment only
+curl -fsSL https://raw.githubusercontent.com/danielsalles/setup_cpp20/main/install.sh | bash -s -- --env-only
+
+# Tools only (project creator + package helper)
+curl -fsSL https://raw.githubusercontent.com/danielsalles/setup_cpp20/main/install.sh | bash -s -- --tools-only
+```
+
+---
+
+## 🎯 Usage Examples
+
+### **Project Creation**
+
+#### **Console Application**
+```bash
+cpp-new calculator console
+cd calculator
+./scripts/build.sh
+```
+
+#### **Static Library**
+```bash
+cpp-new mathlib library
+cd mathlib
+./scripts/build.sh
+./build/mathlib_example  # Run example
+```
+
+#### **GUI Application**
+```bash
+cpp-new myapp gui
+cd myapp
+vcpkg-add imgui
+./scripts/build.sh
+```
+
+### **Package Management**
+
+#### **Basic Commands**
+```bash
+# Add packages (npm-like experience)
+vcpkg-add fmt              # Fast formatting
+vcpkg-add spdlog           # Logging library  
+vcpkg-add nlohmann-json    # JSON library
+vcpkg-add catch2           # Testing framework
+
+# List packages
+vcpkg-list
+
+# Search packages
+vcpkg-search http
+
+# Remove packages
+vcpkg-remove fmt
+```
+
+#### **Advanced Package Management**
+```bash
+# Add packages with features
+vcpkg-helper add "boost[system,filesystem]"
+vcpkg-helper add "opencv[contrib]"
+
+# Get package information
+vcpkg-helper info fmt
+
+# Update all packages
+vcpkg-helper update
+```
+
+### **Development Workflow**
+
+```bash
+# Project development cycle
+cd my-project
+./scripts/dev.sh build     # Debug build
+./scripts/dev.sh test      # Run tests  
+./scripts/dev.sh format    # Format code
+./scripts/dev.sh analyze   # Static analysis
+./scripts/dev.sh clean     # Clean build
+```
+
+---
+
+## 🔧 Advanced Features
+
+### **Modern C++20 Examples**
+
+Every generated project includes real C++20 code:
+
+```cpp
+// 🔥 Concepts for type safety
+template<typename T>
+concept Numeric = std::integral<T> || std::floating_point<T>;
+
+template<Numeric T>
+constexpr T square(T value) noexcept {
+    return value * value;
+}
+
+// 🌊 Ranges for functional programming  
+auto process_data(const std::vector<int>& numbers) {
+    return numbers 
+        | std::views::filter([](int n) { return n > 0; })
+        | std::views::transform(square<int>)
+        | std::views::take(10);
+}
+
+// 🎯 Designated initializers for clarity
+struct Config {
+    std::string name;
+    int version;
+    bool debug_mode;
+};
+
+auto config = Config{
+    .name = "MyApp",
+    .version = 1,
+    .debug_mode = true
+};
+```
+
+### **Smart vcpkg Integration**
+
+Generated projects use intelligent vcpkg helper functions:
+
+```cmake
+# CMakeLists.txt with automatic package discovery
+include(cmake/VcpkgHelpers.cmake)
+
+# Automatically finds all packages from vcpkg.json
+vcpkg_find_packages()
+
+# Links all packages automatically
+vcpkg_link_libraries(my_target PRIVATE)
+
+# Or link specific packages
+vcpkg_link_specific(my_target PRIVATE fmt spdlog)
+```
+
+### **Automatic Package Discovery**
+
+The vcpkg helpers intelligently discover packages:
+
+1. **Known Packages**: Uses pre-defined mappings for popular packages
+2. **Custom Mappings**: Supports user-defined package mappings  
+3. **Smart Discovery**: Tries multiple naming patterns for unknown packages
+4. **Target Guessing**: Attempts various target naming conventions
+
+---
+
+## 🎨 Project Structure
+
+Generated projects follow modern C++ best practices:
+
+```
+my-project/
+├── src/                    # Source files
+├── include/my-project/     # Header files
+├── tests/                  # Test files
+├── scripts/                # Build scripts
+├── cmake/                  # CMake modules
+│   ├── VcpkgHelpers.cmake # Smart package discovery
+│   ├── CompilerWarnings.cmake
+│   └── StaticAnalysis.cmake
+├── docs/                   # Documentation
+├── .github/workflows/      # CI/CD
+├── CMakeLists.txt         # Modern CMake config
+├── vcpkg.json             # Package manifest
+├── .clang-format          # Code formatting
+└── .gitignore             # Git configuration
+```
+
+### **CMake Best Practices**
+
+```cmake
+# Modern CMake 3.25+
+cmake_minimum_required(VERSION 3.25)
+
+# C++20 enforcement
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Smart package discovery
+include(cmake/VcpkgHelpers.cmake)
+vcpkg_find_packages()
+
+# Modern target-based approach
+add_executable(my_app src/main.cpp)
+vcpkg_link_libraries(my_app PRIVATE)
+```
+
+### **Testing Integration**
+
+```cpp
+// Catch2 v3 tests included
+TEST_CASE("Math operations", "[math]") {
+    REQUIRE(square(4) == 16);
+    REQUIRE(add(2, 3) == 5);
+}
+
+// C++20 concepts testing
+TEST_CASE("Concepts work", "[concepts]") {
+    REQUIRE(square(2) == 4);      // int
+    REQUIRE(square(2.5) == 6.25); // double
+}
+```
+
+---
+
+## 📚 Available Commands
+
+### **Project Creation**
+```bash
+cpp-new <name> [type]        # Create new C++20 project
+  Types: console, library, gui
+```
+
+### **Package Management**
+```bash
+vcpkg-helper <command>       # Full package management
+vcpkg-add <package>          # Add package (shortcut)
+vcpkg-remove <package>       # Remove package (shortcut)
+vcpkg-list                   # List packages (shortcut)
+vcpkg-search <query>         # Search packages (shortcut)
+```
+
+### **Project Scripts**
+```bash
+./scripts/build.sh [type]    # Build project (Debug/Release)
+./scripts/dev.sh <command>   # Development workflow
+  Commands: build, test, format, analyze, clean
+```
+
+---
+
+## 🆘 Troubleshooting
+
+### **Common Issues**
+
+#### **"vcpkg not found"**
+```bash
+# Check VCPKG_ROOT environment variable
+echo $VCPKG_ROOT
+
+# If empty, restart terminal or run:
+source ~/.zshrc
+```
+
+#### **"cpp-new command not found"**
+```bash
+# Restart terminal or reload shell
+source ~/.zshrc
+
+# Or run the installer again
+curl -fsSL https://raw.githubusercontent.com/danielsalles/setup_cpp20/main/install.sh | bash -s -- --tools-only
+```
+
+#### **"CMake version too old"**
+```bash
+# Update CMake via Homebrew
+brew upgrade cmake
+
+# Check version
+cmake --version  # Should be 3.25+
+```
+
+#### **"C++20 not supported"**
+```bash
+# Update compiler
+brew install llvm
+
+# Check C++20 support
+clang++ -std=c++20 --version
+```
+
+### **Getting Help**
+
+1. **Check Issues**: [GitHub Issues](https://github.com/danielsalles/setup_cpp20/issues)
+2. **Discussion**: [GitHub Discussions](https://github.com/danielsalles/setup_cpp20/discussions)  
+3. **Documentation**: [Project Wiki](https://github.com/danielsalles/setup_cpp20/wiki)
+
+### **Report Bugs**
+
+Include this information:
+- 🖥️ **System**: `uname -a`
+- 🍎 **macOS Version**: `sw_vers -productVersion` (if macOS)
+- 🔧 **Tool Versions**: `cmake --version`, `clang++ --version`
+- 📋 **Error Output**: Full error messages
+
+---
+
+## 📊 Features Comparison
+
+| Feature | This Setup | Manual Setup | Other Tools |
+|---------|------------|--------------|-------------|
+| **Setup Time** | 5 minutes | Hours | Varies |
+| **C++20 Support** | ✅ Full | ⚠️ Manual | ⚠️ Limited |
+| **Package Management** | ✅ npm-like | ❌ Manual | ⚠️ Basic |
+| **Project Templates** | ✅ Modern | ❌ None | ⚠️ Basic |
+| **Smart Discovery** | ✅ Automatic | ❌ Manual | ❌ None |
+| **Best Practices** | ✅ Built-in | ⚠️ Manual | ⚠️ Varies |
+| **Testing Ready** | ✅ Included | ❌ Manual | ⚠️ Basic |
+| **CI/CD Templates** | ✅ GitHub Actions | ❌ None | ⚠️ Limited |
+
+---
+
+## 📄 License
+
+This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
+
+### **Why MIT?**
+- ✅ **Commercial Use**: Use in commercial projects
+- ✅ **Modification**: Adapt to your needs
+- ✅ **Distribution**: Share with your team
+- ✅ **Private Use**: No restrictions
+
+---
+
+## 🙏 Acknowledgments
+
+### **Inspiration**
+- 🦀 **Rust's Cargo**: Package management inspiration
+- 📦 **Node.js npm**: Developer experience model
+- 🐍 **Python pip**: Simplicity goals
+
+### **Technology Stack**
+- 🏗️ **CMake**: Build system foundation
+- 📦 **vcpkg**: Microsoft's excellent package manager
+- 🍺 **Homebrew**: macOS package management
+- 🔧 **LLVM/Clang**: Modern C++20 compiler
+
+### **Community**
+Thanks to all contributors, testers, and users who make this project better every day!
+
+---
+
+**Made with ❤️ by developers, for developers**
+
+*Stop configuring. Start coding.* 🚀
