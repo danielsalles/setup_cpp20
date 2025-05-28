@@ -152,10 +152,27 @@ setup_vcpkg() {
     log_header "Setting up vcpkg"
     
     if [[ -d "$VCPKG_DIR" ]]; then
-        log_info "vcpkg already exists at $VCPKG_DIR"
-        log_step "Updating vcpkg..."
-        cd "$VCPKG_DIR"
-        git pull
+        log_info "vcpkg directory already exists at $VCPKG_DIR"
+        
+        # Check if it's a valid git repository
+        if [[ -d "$VCPKG_DIR/.git" ]] && cd "$VCPKG_DIR" && git rev-parse --git-dir &>/dev/null; then
+            log_step "Updating existing vcpkg repository..."
+            if git pull origin main 2>/dev/null || git pull origin master 2>/dev/null; then
+                log_success "vcpkg updated successfully"
+            else
+                log_warning "Failed to update vcpkg, continuing with existing version"
+            fi
+        else
+            log_warning "Existing vcpkg directory is not a valid git repository"
+            log_step "Removing corrupted directory and reinstalling..."
+            rm -rf "$VCPKG_DIR"
+            log_step "Cloning fresh vcpkg..."
+            git clone https://github.com/Microsoft/vcpkg.git "$VCPKG_DIR"
+            cd "$VCPKG_DIR"
+        fi
+        
+        # Always try to bootstrap (safe to run multiple times)
+        log_step "Bootstrapping vcpkg..."
         ./bootstrap-vcpkg.sh
     else
         log_step "Cloning vcpkg..."
@@ -169,18 +186,28 @@ setup_vcpkg() {
         ./vcpkg integrate install
     fi
     
-    # Add to environment
-    cat >> ~/.zshrc << 'EOF'
+    # Add to environment (only if not already present)
+    if ! grep -q "VCPKG_ROOT" ~/.zshrc 2>/dev/null; then
+        cat >> ~/.zshrc << 'EOF'
 
 # vcpkg configuration
 export VCPKG_ROOT="$HOME/.vcpkg"
 export PATH="$VCPKG_ROOT:$PATH"
 EOF
+        log_info "Added vcpkg configuration to ~/.zshrc"
+    else
+        log_info "vcpkg configuration already exists in ~/.zshrc"
+    fi
     
     export VCPKG_ROOT="$VCPKG_DIR"
     export PATH="$VCPKG_ROOT:$PATH"
     
-    log_success "vcpkg configured"
+    # Verify vcpkg is working
+    if [[ -x "$VCPKG_DIR/vcpkg" ]]; then
+        log_success "vcpkg configured and ready"
+    else
+        log_warning "vcpkg binary not found, but directory exists"
+    fi
 }
 
 # 🎨 Setup aliases and functions
@@ -227,6 +254,25 @@ verify_installation() {
     log_header "Verifying Installation"
     
     local errors=0
+    
+    # Check vcpkg specifically
+    log_step "Checking vcpkg installation..."
+    if [[ -d "$VCPKG_DIR" ]]; then
+        if [[ -d "$VCPKG_DIR/.git" ]]; then
+            log_success "vcpkg directory is a valid git repository"
+        else
+            log_warning "vcpkg directory exists but is not a git repository"
+        fi
+        
+        if [[ -x "$VCPKG_DIR/vcpkg" ]]; then
+            log_success "vcpkg binary is executable"
+        else
+            log_warning "vcpkg binary not found or not executable"
+        fi
+    else
+        log_error "vcpkg directory not found"
+        ((errors++))
+    fi
     
     # Check tools
     local tools=("cmake" "ninja" "clang++" "vcpkg")

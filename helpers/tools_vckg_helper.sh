@@ -176,8 +176,21 @@ update_packages() {
     log_info "Updating vcpkg packages..."
     
     if command -v vcpkg &>/dev/null; then
-        # Update vcpkg itself
-        cd "$VCPKG_ROOT" && git pull
+        # Update vcpkg itself if it's a valid git repository
+        if [[ -n "$VCPKG_ROOT" ]] && [[ -d "$VCPKG_ROOT/.git" ]]; then
+            log_info "Updating vcpkg repository..."
+            if cd "$VCPKG_ROOT" && git rev-parse --git-dir &>/dev/null; then
+                if git pull origin main 2>/dev/null || git pull origin master 2>/dev/null; then
+                    log_success "vcpkg repository updated"
+                else
+                    log_warning "Failed to update vcpkg repository, continuing with existing version"
+                fi
+            else
+                log_warning "vcpkg directory is not a valid git repository"
+            fi
+        else
+            log_warning "VCPKG_ROOT not set or not a git repository, skipping vcpkg update"
+        fi
         
         # Rebuild packages
         cd - >/dev/null
