@@ -360,6 +360,14 @@ clang++ -std=c++20 --version
 2. **Discussion**: [GitHub Discussions](https://github.com/danielsalles/setup_cpp20/discussions)  
 3. **Documentation**: [Project Wiki](https://github.com/danielsalles/setup_cpp20/wiki)
 
+### **Recent Improvements**
+
+**v2.0.1 - vcpkg Installation Fixes**
+- ✅ **Fixed git repository errors**: No more "fatal: not a git repository" errors
+- ✅ **Improved vcpkg detection**: Better handling of existing vcpkg installations
+- ✅ **Simplified update logic**: Focus on installation rather than updates to avoid conflicts
+- ✅ **Enhanced error handling**: Graceful fallbacks when git operations fail
+
 ### **Report Bugs**
 
 Include this information:

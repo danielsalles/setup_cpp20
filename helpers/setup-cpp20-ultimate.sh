@@ -154,26 +154,27 @@ setup_vcpkg() {
     if [[ -d "$VCPKG_DIR" ]]; then
         log_info "vcpkg directory already exists at $VCPKG_DIR"
         
-        # Check if it's a valid git repository
-        if [[ -d "$VCPKG_DIR/.git" ]] && cd "$VCPKG_DIR" && git rev-parse --git-dir &>/dev/null; then
-            log_step "Updating existing vcpkg repository..."
-            if git pull origin main 2>/dev/null || git pull origin master 2>/dev/null; then
-                log_success "vcpkg updated successfully"
-            else
-                log_warning "Failed to update vcpkg, continuing with existing version"
-            fi
-        else
-            log_warning "Existing vcpkg directory is not a valid git repository"
-            log_step "Removing corrupted directory and reinstalling..."
-            rm -rf "$VCPKG_DIR"
-            log_step "Cloning fresh vcpkg..."
-            git clone https://github.com/Microsoft/vcpkg.git "$VCPKG_DIR"
+        # Check if vcpkg binary exists and is working
+        if [[ -x "$VCPKG_DIR/vcpkg" ]]; then
+            log_success "vcpkg is already installed and ready"
             cd "$VCPKG_DIR"
+        else
+            log_warning "vcpkg directory exists but binary is missing"
+            log_step "Bootstrapping vcpkg..."
+            cd "$VCPKG_DIR"
+            
+            # Try to bootstrap, if it fails, reinstall
+            if ! ./bootstrap-vcpkg.sh 2>/dev/null; then
+                log_warning "Bootstrap failed, reinstalling vcpkg..."
+                cd "$HOME"
+                rm -rf "$VCPKG_DIR"
+                log_step "Cloning fresh vcpkg..."
+                git clone https://github.com/Microsoft/vcpkg.git "$VCPKG_DIR"
+                cd "$VCPKG_DIR"
+                log_step "Bootstrapping vcpkg..."
+                ./bootstrap-vcpkg.sh
+            fi
         fi
-        
-        # Always try to bootstrap (safe to run multiple times)
-        log_step "Bootstrapping vcpkg..."
-        ./bootstrap-vcpkg.sh
     else
         log_step "Cloning vcpkg..."
         git clone https://github.com/Microsoft/vcpkg.git "$VCPKG_DIR"
