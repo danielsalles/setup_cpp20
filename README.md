@@ -317,13 +317,16 @@ vcpkg-search <query>         # Search packages (shortcut)
 
 ### **Common Issues**
 
-#### **"vcpkg not found"**
+#### **"vcpkg not found" or Package Issues**
 ```bash
 # Check VCPKG_ROOT environment variable
 echo $VCPKG_ROOT
 
 # If empty, restart terminal or run:
 source ~/.zshrc
+
+# Run diagnostic tool for detailed analysis
+curl -fsSL https://raw.githubusercontent.com/danielsalles/setup_cpp20/main/helpers/vcpkg-diagnose.sh | bash
 ```
 
 #### **"cpp-new command not found"**

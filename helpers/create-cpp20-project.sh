@@ -133,8 +133,18 @@ option(ENABLE_BENCHMARKS "Enable benchmarks" OFF)
 
 # 📚 Find packages
 if($USE_VCPKG)
-find_package(fmt CONFIG REQUIRED)
-find_package(spdlog CONFIG REQUIRED)
+# Note: vcpkg_find_packages() above should have found these automatically
+# These are fallback manual find_package calls
+find_package(fmt CONFIG QUIET)
+find_package(spdlog CONFIG QUIET)
+
+# Check if packages were found
+if(NOT fmt_FOUND)
+    message(WARNING "fmt package not found - install with: vcpkg install fmt")
+endif()
+if(NOT spdlog_FOUND)
+    message(WARNING "spdlog package not found - install with: vcpkg install spdlog")
+endif()
 endif()
 
 CMAKE_EOF
@@ -538,6 +548,14 @@ function(vcpkg_find_packages)
             endif()
         else()
             # Use known mapping, try to find the package
+            find_package(${FIND_NAME} CONFIG QUIET)
+            if(${FIND_NAME}_FOUND)
+                message(STATUS "  ✅ Found package: ${FIND_NAME}")
+            endif()
+        endif()
+        
+        # Try to find the package if we have a find name but haven't found it yet
+        if(FIND_NAME AND NOT ${FIND_NAME}_FOUND)
             find_package(${FIND_NAME} CONFIG QUIET)
         endif()
         
@@ -1150,6 +1168,13 @@ if [[ -n "${VCPKG_ROOT:-}" ]] && [[ -f "$VCPKG_ROOT/scripts/buildsystems/vcpkg.c
     CMAKE_ARGS+=(-DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake")
     CMAKE_ARGS+=(-DUSE_VCPKG=ON)
     log_info "Using vcpkg toolchain"
+    
+    # Install vcpkg dependencies if vcpkg.json exists
+    if [[ -f "vcpkg.json" ]] && command -v vcpkg &>/dev/null; then
+        log_info "Installing vcpkg dependencies..."
+        vcpkg install
+        log_success "vcpkg dependencies installed"
+    fi
 fi
 
 cmake "${CMAKE_ARGS[@]}"
