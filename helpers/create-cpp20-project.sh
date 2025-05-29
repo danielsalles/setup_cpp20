@@ -113,24 +113,9 @@ vcpkg_find_packages()
 option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
 option(ENABLE_BENCHMARKS "Enable benchmarks" OFF)
 
-# 📚 Find packages (only if vcpkg packages are available)
-# Note: vcpkg_find_packages() above should have found these automatically
-# These are fallback manual find_package calls
-find_package(fmt CONFIG QUIET)
-find_package(spdlog CONFIG QUIET)
-
-# Check if packages were found
-if(NOT fmt_FOUND)
-    message(WARNING "fmt package not found - install with: vcpkg install fmt")
-endif()
-if(NOT spdlog_FOUND)
-    message(WARNING "spdlog package not found - install with: vcpkg install spdlog")
-endif()
-
 # 🧪 Testing
 enable_testing()
 add_subdirectory(tests)
-
 CMAKE_EOF
 
     if [[ "$PROJECT_TYPE" == "console" ]]; then
