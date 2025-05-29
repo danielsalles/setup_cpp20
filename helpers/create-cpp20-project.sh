@@ -36,7 +36,6 @@ show_banner() {
 ║  • CMake configuration                                     ║
 ║  • vcpkg integration                                       ║
 ║  • Testing framework                                       ║
-║  • CI/CD workflows                                         ║
 ║  • Modern C++20 examples                                   ║
 ║                                                            ║
 ╚════════════════════════════════════════════════════════════╝
@@ -76,7 +75,7 @@ get_project_info() {
 create_project_structure() {
     log_header "Creating Project Structure"
     
-    mkdir -p "$PROJECT_NAME"/{src,include/"$PROJECT_NAME",tests,docs,scripts,.github/workflows}
+    mkdir -p "$PROJECT_NAME"/{src,include/"$PROJECT_NAME",tests,scripts}
     cd "$PROJECT_NAME"
     
     log_success "Directory structure created"
@@ -1176,62 +1175,6 @@ DEV_EOF
     log_success "Build scripts created"
 }
 
-create_ci_config() {
-    log_header "Creating CI/CD Configuration"
-    
-    cat > .github/workflows/ci.yml << 'CI_EOF'
-name: CI
-
-on:
-  push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main ]
-
-jobs:
-  test:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-        build_type: [Debug, Release]
-        
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Install dependencies (Ubuntu)
-      if: runner.os == 'Linux'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y cmake ninja-build clang
-        
-    - name: Install dependencies (macOS)
-      if: runner.os == 'macOS'
-      run: |
-        brew install cmake ninja llvm
-        
-    - name: Setup vcpkg
-      uses: lukka/run-vcpkg@v11
-      with:
-        vcpkgGitCommitId: '${{ env.VCPKG_COMMIT_ID }}'
-        
-    - name: Configure CMake
-      run: |
-        cmake -B build \
-          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
-          -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
-          -G Ninja
-          
-    - name: Build
-      run: cmake --build build --parallel
-      
-    - name: Test
-      run: cd build && ctest --output-on-failure --parallel
-CI_EOF
-    
-    log_success "CI/CD configuration created"
-}
-
 create_documentation() {
     log_header "Creating Documentation"
     
@@ -1527,7 +1470,6 @@ main() {
     create_test_files
     create_vcpkg_config
     create_build_scripts
-    create_ci_config
     create_documentation
     create_config_files
     
