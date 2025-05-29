@@ -230,16 +230,21 @@ WARNING_EOF
     
     # Static analysis
     cat > cmake/StaticAnalysis.cmake << 'ANALYSIS_EOF'
-option(ENABLE_CLANG_TIDY "Enable clang-tidy" OFF)
+option(ENABLE_CLANG_TIDY "Enable clang-tidy" ON)
 option(ENABLE_CPPCHECK "Enable cppcheck" OFF)
 
 if(ENABLE_CLANG_TIDY)
     find_program(CLANGTIDY clang-tidy)
     if(CLANGTIDY)
-        set(CMAKE_CXX_CLANG_TIDY ${CLANGTIDY})
-        message(STATUS "🔍 clang-tidy enabled")
+        # Enable clang-tidy automatically for Debug builds
+        if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+            set(CMAKE_CXX_CLANG_TIDY ${CLANGTIDY} --config-file=${CMAKE_SOURCE_DIR}/.clang-tidy)
+            message(STATUS "🔍 clang-tidy enabled for Debug build")
+        else()
+            message(STATUS "🔍 clang-tidy available (use -DENABLE_CLANG_TIDY=ON to force)")
+        endif()
     else()
-        message(SEND_ERROR "🔍 clang-tidy requested but not found")
+        message(WARNING "🔍 clang-tidy not found - install with: brew install llvm")
     endif()
 endif()
 
@@ -1123,7 +1128,7 @@ log_success() { echo -e "${GREEN}✅ $*${NC}"; }
 
 case "${1:-help}" in
     "build")
-        log_info "Building in debug mode..."
+        log_info "Building in debug mode with clang-tidy..."
         ./scripts/build.sh Debug
         ;;
     "test")
@@ -1140,28 +1145,28 @@ case "${1:-help}" in
             find src include tests -name "*.cpp" -o -name "*.hpp" | xargs clang-format -i
             log_success "Code formatted"
         else
-            echo "clang-format not found"
+            echo "clang-format not found - install with: brew install llvm"
         fi
         ;;
-    "analyze")
+    "lint")
         if command -v clang-tidy &>/dev/null; then
-            log_info "Running static analysis..."
-            cmake -B build -DENABLE_CLANG_TIDY=ON
-            cmake --build build
+            log_info "Running clang-tidy analysis..."
+            find src include -name "*.cpp" -o -name "*.hpp" | xargs clang-tidy --config-file=.clang-tidy
+            log_success "Static analysis completed"
         else
-            echo "clang-tidy not found"
+            echo "clang-tidy not found - install with: brew install llvm"
         fi
         ;;
     *)
         echo "🔧 Development helper"
-        echo "Usage: $0 {build|test|clean|format|analyze}"
+        echo "Usage: $0 {build|test|clean|format|lint}"
         echo ""
         echo "Commands:"
-        echo "  build   - Build in debug mode"
+        echo "  build   - Debug build with clang-tidy"
         echo "  test    - Run tests"
         echo "  clean   - Clean build directory"
         echo "  format  - Format code with clang-format"
-        echo "  analyze - Run static analysis"
+        echo "  lint    - Run clang-tidy analysis"
         ;;
 esac
 DEV_EOF
@@ -1242,7 +1247,7 @@ Modern C++20 ${PROJECT_TYPE} project created with [setup_cpp20](https://github.c
 ./scripts/build.sh
 
 # Development workflow
-./scripts/dev.sh build    # Debug build
+./scripts/dev.sh build    # Debug build with clang-tidy
 ./scripts/dev.sh test     # Run tests
 ./scripts/dev.sh format   # Format code
 ./scripts/dev.sh clean    # Clean build
@@ -1281,7 +1286,7 @@ ${PROJECT_NAME}/
 - 📦 **vcpkg**: Automatic package discovery and linking
 - 🧪 **Testing**: Catch2 integration (included)
 - 🔧 **Build Tools**: CMake + Ninja
-- 🎨 **Code Quality**: clang-format and clang-tidy support
+- 🎨 **Code Quality**: clang-format and clang-tidy (Google style) support
 
 ---
 
@@ -1392,6 +1397,57 @@ SpacesInSquareBrackets: false
 Standard: c++20
 CLANG_FORMAT_EOF
     
+    # clang-tidy configuration
+    cat > .clang-tidy << 'CLANG_TIDY_EOF'
+---
+Checks: >
+  google-*,
+  modernize-*,
+  performance-*,
+  readability-*,
+  bugprone-*,
+  -google-readability-todo,
+  -google-runtime-references,
+  -modernize-use-trailing-return-type,
+  -readability-named-parameter,
+  -readability-magic-numbers,
+  -readability-avoid-const-params-in-decls
+
+CheckOptions:
+  - key: readability-identifier-naming.NamespaceCase
+    value: lower_case
+  - key: readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key: readability-identifier-naming.StructCase
+    value: CamelCase
+  - key: readability-identifier-naming.FunctionCase
+    value: lower_case
+  - key: readability-identifier-naming.VariableCase
+    value: lower_case
+  - key: readability-identifier-naming.ParameterCase
+    value: lower_case
+  - key: readability-identifier-naming.MemberCase
+    value: lower_case
+  - key: readability-identifier-naming.PrivateMemberSuffix
+    value: _
+  - key: readability-identifier-naming.ConstantCase
+    value: UPPER_CASE
+  - key: readability-identifier-naming.MacroCase
+    value: UPPER_CASE
+  - key: google-readability-braces-around-statements.ShortStatementLines
+    value: 1
+  - key: google-readability-function-size.StatementThreshold
+    value: 800
+  - key: google-readability-namespace-comments.ShortNamespaceLines
+    value: 10
+  - key: google-readability-namespace-comments.SpacesBeforeComments
+    value: 2
+
+WarningsAsErrors: ''
+HeaderFilterRegex: '(src|include)/.*\.(h|hpp)$'
+FormatStyle: file
+CLANG_TIDY_EOF
+    
     # License
     cat > LICENSE << 'LICENSE_EOF'
 MIT License
@@ -1439,16 +1495,18 @@ show_completion() {
   vcpkg-add nlohmann-json
 
 🔧 Development:
-  ./scripts/dev.sh build    # Debug build
+  ./scripts/dev.sh build    # Debug build with clang-tidy
   ./scripts/dev.sh test     # Run tests
   ./scripts/dev.sh format   # Format code
+  ./scripts/dev.sh lint     # Run clang-tidy analysis
+  ./scripts/dev.sh clean    # Clean build
 
 📚 Features:
   ✅ C++20 with concepts and ranges
   ✅ vcpkg with automatic package discovery
   ✅ Catch2 testing framework
   ✅ Modern CMake configuration
-  ✅ Build scripts and code formatting
+  ✅ Build scripts and code formatting with clang-tidy
 
 Happy coding! 🎯
 COMPLETION_EOF
