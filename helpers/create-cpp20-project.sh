@@ -1037,8 +1037,7 @@ create_vcpkg_config() {
   "homepage": "https://github.com/your-username/${PROJECT_NAME}",
   "dependencies": [
     ${deps}
-  ],
-  "builtin-baseline": "$(git ls-remote https://github.com/Microsoft/vcpkg.git HEAD | cut -f1)"
+  ]
 }
 VCPKG_EOF
     
