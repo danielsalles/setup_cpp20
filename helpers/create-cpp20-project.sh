@@ -18,8 +18,6 @@ readonly NC='\033[0m'
 # 📊 Configuration
 PROJECT_NAME="${1:-}"
 PROJECT_TYPE="${2:-console}"  # console, library, gui
-USE_VCPKG="${3:-true}"
-USE_TESTING="${4:-true}"
 
 log_info() { echo -e "${BLUE}ℹ️  $*${NC}"; }
 log_success() { echo -e "${GREEN}✅ $*${NC}"; }
@@ -62,14 +60,6 @@ get_project_info() {
             3) PROJECT_TYPE="gui" ;;
             *) PROJECT_TYPE="console" ;;
         esac
-        
-        read -p "Use vcpkg? (Y/n): " -n 1 -r
-        echo
-        [[ $REPLY =~ ^[Nn]$ ]] && USE_VCPKG="false" || USE_VCPKG="true"
-        
-        read -p "Include testing? (Y/n): " -n 1 -r
-        echo
-        [[ $REPLY =~ ^[Nn]$ ]] && USE_TESTING="false" || USE_TESTING="true"
     fi
     
     if [[ -z "$PROJECT_NAME" ]] || [[ "$PROJECT_NAME" =~ [^a-zA-Z0-9_-] ]]; then
@@ -121,10 +111,9 @@ vcpkg_find_packages()
 
 # 🎯 Build options
 option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
-option(ENABLE_TESTING "Enable testing" ${USE_TESTING})
 option(ENABLE_BENCHMARKS "Enable benchmarks" OFF)
 
-# 📚 Find packages
+# 📚 Find packages (only if vcpkg packages are available)
 # Note: vcpkg_find_packages() above should have found these automatically
 # These are fallback manual find_package calls
 find_package(fmt CONFIG QUIET)
@@ -137,6 +126,10 @@ endif()
 if(NOT spdlog_FOUND)
     message(WARNING "spdlog package not found - install with: vcpkg install spdlog")
 endif()
+
+# 🧪 Testing
+enable_testing()
+add_subdirectory(tests)
 
 CMAKE_EOF
 
@@ -189,18 +182,6 @@ add_executable(\${PROJECT_NAME}_example
 target_link_libraries(\${PROJECT_NAME}_example PRIVATE \${PROJECT_NAME})
 
 CMAKE_LIB_EOF
-    fi
-    
-    if [[ "$USE_TESTING" == "true" ]]; then
-        cat >> CMakeLists.txt << CMAKE_TEST_EOF
-
-# 🧪 Testing
-if(ENABLE_TESTING)
-    enable_testing()
-    add_subdirectory(tests)
-endif()
-
-CMAKE_TEST_EOF
     fi
     
     # Create cmake modules
@@ -362,25 +343,9 @@ function(vcpkg_find_packages)
         "spdlog;spdlog;spdlog::spdlog"
         "catch2;Catch2;Catch2::Catch2WithMain"
         "boost;Boost;Boost::boost"
-        "opencv;OpenCV;opencv_core"
-        "eigen3;Eigen3;Eigen3::Eigen"
         "nlohmann-json;nlohmann_json;nlohmann_json::nlohmann_json"
-        "glfw3;glfw3;glfw"
-        "opengl;OpenGL;OpenGL::GL"
-        "vulkan;Vulkan;Vulkan::Vulkan"
-        "asio;asio;asio::asio"
-        "protobuf;Protobuf;protobuf::libprotobuf"
-        "grpc;gRPC;gRPC::grpc++"
-        "sqlite3;SQLite3;SQLite::SQLite3"
-        "curl;CURL;CURL::libcurl"
-        "zlib;ZLIB;ZLIB::ZLIB"
-        "openssl;OpenSSL;OpenSSL::SSL"
         "gtest;GTest;GTest::gtest"
         "benchmark;benchmark;benchmark::benchmark"
-        "tbb;TBB;TBB::tbb"
-        "imgui;imgui;imgui::imgui"
-        "sdl2;SDL2;SDL2::SDL2"
-        "sfml;SFML;sfml-graphics"
     )
     
     # Extract all dependencies from JSON using jq
@@ -667,11 +632,6 @@ create_source_files() {
 #include <algorithm>
 #include <string>
 
-#ifdef USE_VCPKG
-#include <fmt/format.h>
-#include <spdlog/spdlog.h>
-#endif
-
 // 🔥 C++20 Concepts example
 template<typename T>
 concept Numeric = std::integral<T> || std::floating_point<T>;
@@ -690,34 +650,21 @@ auto process_numbers(const std::vector<int>& numbers) {
 }
 
 int main() {
-    #ifdef USE_VCPKG
-    spdlog::info("🚀 Starting modern C++20 application");
-    #else
     std::cout << "🚀 Starting modern C++20 application\n";
-    #endif
     
     // Demo data
     std::vector<int> numbers{-2, 1, -3, 4, -5, 6, 7, -8, 9, 10, 11, 12};
     
-    #ifdef USE_VCPKG
-    spdlog::info("Original numbers: {}", fmt::join(numbers, ", "));
-    #else
     std::cout << "Original numbers: ";
     for (auto n : numbers) std::cout << n << " ";
     std::cout << "\n";
-    #endif
     
     // Process using C++20 ranges
     auto processed = process_numbers(numbers);
     
-    #ifdef USE_VCPKG
-    std::vector<int> result(processed.begin(), processed.end());
-    spdlog::info("Processed (positive, squared, first 10): {}", fmt::join(result, ", "));
-    #else
     std::cout << "Processed (positive, squared, first 10): ";
     for (auto n : processed) std::cout << n << " ";
     std::cout << "\n";
-    #endif
     
     // C++20 designated initializers
     struct Config {
@@ -732,18 +679,10 @@ int main() {
         .debug_mode = true
     };
     
-    #ifdef USE_VCPKG
-    spdlog::info("Config: {} v{} (debug: {})", config.name, config.version, config.debug_mode);
-    #else
     std::cout << "Config: " << config.name << " v" << config.version 
               << " (debug: " << std::boolalpha << config.debug_mode << ")\n";
-    #endif
     
-    #ifdef USE_VCPKG
-    spdlog::info("✅ Application completed successfully!");
-    #else
     std::cout << "✅ Application completed successfully!\n";
-    #endif
     
     return 0;
 }
@@ -897,11 +836,10 @@ EXAMPLE_EOF
 }
 
 create_test_files() {
-    if [[ "$USE_TESTING" == "true" ]]; then
-        log_header "Creating Test Files"
-        
-        # Test CMakeLists.txt
-        cat > tests/CMakeLists.txt << 'TEST_CMAKE_EOF'
+    log_header "Creating Test Files"
+    
+    # Test CMakeLists.txt
+    cat > tests/CMakeLists.txt << 'TEST_CMAKE_EOF'
 # 🧪 Testing configuration
 find_package(Catch2 3 QUIET)
 
@@ -919,45 +857,45 @@ endif()
 # Test executable
 TEST_CMAKE_EOF
 
-        # Add the test executable with project-specific name
-        echo "add_executable(${PROJECT_NAME}_tests" >> tests/CMakeLists.txt
-        echo "    test_main.cpp" >> tests/CMakeLists.txt
-        echo "    test_${PROJECT_NAME}.cpp" >> tests/CMakeLists.txt
-        echo ")" >> tests/CMakeLists.txt
-        echo "" >> tests/CMakeLists.txt
-        
-        # Add target link libraries
-        echo "target_link_libraries(${PROJECT_NAME}_tests PRIVATE" >> tests/CMakeLists.txt
-        echo "    Catch2::Catch2WithMain" >> tests/CMakeLists.txt
-        
-        # Link library for library projects
-        if [[ "$PROJECT_TYPE" == "library" ]]; then
-            echo "    ${PROJECT_NAME}" >> tests/CMakeLists.txt
-        fi
-        
-        echo ")" >> tests/CMakeLists.txt
-        echo "" >> tests/CMakeLists.txt
-        
-        # Add the rest of the CMake configuration
-        cat >> tests/CMakeLists.txt << 'TEST_CMAKE_EOF2'
+    # Add the test executable with project-specific name
+    echo "add_executable(${PROJECT_NAME}_tests" >> tests/CMakeLists.txt
+    echo "    test_main.cpp" >> tests/CMakeLists.txt
+    echo "    test_${PROJECT_NAME}.cpp" >> tests/CMakeLists.txt
+    echo ")" >> tests/CMakeLists.txt
+    echo "" >> tests/CMakeLists.txt
+    
+    # Add target link libraries
+    echo "target_link_libraries(${PROJECT_NAME}_tests PRIVATE" >> tests/CMakeLists.txt
+    echo "    Catch2::Catch2WithMain" >> tests/CMakeLists.txt
+    
+    # Link library for library projects
+    if [[ "$PROJECT_TYPE" == "library" ]]; then
+        echo "    ${PROJECT_NAME}" >> tests/CMakeLists.txt
+    fi
+    
+    echo ")" >> tests/CMakeLists.txt
+    echo "" >> tests/CMakeLists.txt
+    
+    # Add the rest of the CMake configuration
+    cat >> tests/CMakeLists.txt << 'TEST_CMAKE_EOF2'
 # Enable testing
 include(CTest)
 
 # Add test manually (simple and reliable approach)
 TEST_CMAKE_EOF2
 
-        echo "add_test(NAME ${PROJECT_NAME}_tests COMMAND ${PROJECT_NAME}_tests)" >> tests/CMakeLists.txt
-        
-        # Test main file
-        cat > tests/test_main.cpp << 'TEST_MAIN_EOF'
+    echo "add_test(NAME ${PROJECT_NAME}_tests COMMAND ${PROJECT_NAME}_tests)" >> tests/CMakeLists.txt
+    
+    # Test main file
+    cat > tests/test_main.cpp << 'TEST_MAIN_EOF'
 #include <catch2/catch_test_macros.hpp>
 
 // This file can be used for global test setup if needed
 // Catch2 v3 with Catch2::Catch2WithMain handles main() automatically
 TEST_MAIN_EOF
-        
-        if [[ "$PROJECT_TYPE" == "library" ]]; then
-            cat > tests/test_"$PROJECT_NAME".cpp << TEST_LIB_EOF
+    
+    if [[ "$PROJECT_TYPE" == "library" ]]; then
+        cat > tests/test_"$PROJECT_NAME".cpp << TEST_LIB_EOF
 #include <catch2/catch_test_macros.hpp>
 #include "${PROJECT_NAME}/${PROJECT_NAME}.hpp"
 #include <vector>
@@ -1033,9 +971,9 @@ TEST_CASE("C++20 Concepts", "[concepts]") {
     }
 }
 TEST_LIB_EOF
-        else
-            # Console app test
-            cat > tests/test_"$PROJECT_NAME".cpp << TEST_CONSOLE_EOF
+    else
+        # Console app test
+        cat > tests/test_"$PROJECT_NAME".cpp << TEST_CONSOLE_EOF
 #include <catch2/catch_test_macros.hpp>
 #include <vector>
 #include <ranges>
@@ -1081,20 +1019,17 @@ TEST_CASE("C++20 Ranges processing", "[ranges]") {
     REQUIRE(result[2] == 36);     // 6^2
 }
 TEST_CONSOLE_EOF
-        fi
-        
-        log_success "Test files created"
     fi
+    
+    log_success "Test files created"
 }
 
 create_vcpkg_config() {
-    if [[ "$USE_VCPKG" == "true" ]]; then
-        log_header "Creating vcpkg Configuration"
-        
-        local deps='"fmt", "spdlog"'
-        [[ "$USE_TESTING" == "true" ]] && deps+=', "catch2"'
-        
-        cat > vcpkg.json << VCPKG_EOF
+    log_header "Creating vcpkg Configuration"
+    
+    local deps='"catch2"'
+    
+    cat > vcpkg.json << VCPKG_EOF
 {
   "name": "${PROJECT_NAME}",
   "version": "1.0.0",
@@ -1106,9 +1041,8 @@ create_vcpkg_config() {
   "builtin-baseline": "$(git ls-remote https://github.com/Microsoft/vcpkg.git HEAD | cut -f1)"
 }
 VCPKG_EOF
-        
-        log_success "vcpkg configuration created"
-    fi
+    
+    log_success "vcpkg configuration created"
 }
 
 create_build_scripts() {
@@ -1147,7 +1081,6 @@ log_info "Building in $BUILD_TYPE mode..."
 CMAKE_ARGS=(
     -B build
     -DCMAKE_BUILD_TYPE="$BUILD_TYPE"
-    -DENABLE_TESTING=ON
     -G Ninja
 )
 
@@ -1297,7 +1230,6 @@ jobs:
       run: |
         cmake -B build \
           -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
-          -DENABLE_TESTING=ON \
           -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
           -G Ninja
           
@@ -1317,46 +1249,34 @@ create_documentation() {
     cat > README.md << README_EOF
 # ${PROJECT_NAME}
 
-Modern C++20 ${PROJECT_TYPE} project with best practices.
-
-## Features
-
-- 🚀 **C++20**: Uses modern C++20 features (concepts, ranges, coroutines)
-- 📦 **Package Management**: vcpkg integration for dependencies  
-- 🧪 **Testing**: Catch2 testing framework
-- 🔧 **Build System**: CMake with Ninja generator
-- 🔍 **Static Analysis**: Optional clang-tidy integration
-- 🎨 **Code Formatting**: clang-format configuration
-- 🤖 **CI/CD**: GitHub Actions workflow
-
-## Requirements
-
-- CMake 3.25+
-- C++20 compatible compiler (GCC 10+, Clang 10+, MSVC 2019+)
-- vcpkg (optional but recommended)
+Modern C++20 ${PROJECT_TYPE} project created with [setup_cpp20](https://github.com/danielsalles/setup_cpp20).
 
 ## Quick Start
 
-### Build and Run
-
 \`\`\`bash
-# Build in release mode
-./scripts/build.sh Release
+# Build and run
+./scripts/build.sh
 
-# Build and run tests  
-./scripts/build.sh Debug true
-\`\`\`
-
-### Development
-
-\`\`\`bash
-# Development commands
+# Development workflow
 ./scripts/dev.sh build    # Debug build
 ./scripts/dev.sh test     # Run tests
 ./scripts/dev.sh format   # Format code
-./scripts/dev.sh analyze  # Static analysis
 ./scripts/dev.sh clean    # Clean build
 \`\`\`
+
+## Adding Dependencies
+
+\`\`\`bash
+# Add packages using vcpkg-helper commands
+vcpkg-add fmt
+vcpkg-add spdlog
+vcpkg-add nlohmann-json
+
+# Build project
+./scripts/build.sh
+\`\`\`
+
+The project automatically discovers and links vcpkg packages from \`vcpkg.json\`.
 
 ## Project Structure
 
@@ -1366,332 +1286,23 @@ ${PROJECT_NAME}/
 ├── include/             # Header files
 ├── tests/               # Test files
 ├── scripts/             # Build scripts
-├── docs/                # Documentation
-├── .github/workflows/   # CI/CD
+├── cmake/               # CMake modules
 ├── CMakeLists.txt      # CMake configuration
 └── vcpkg.json          # Package manifest
 \`\`\`
 
-## Dependencies
+## Features
 
-$(if [[ "$USE_VCPKG" == "true" ]]; then
-echo "This project uses vcpkg with **automatic package discovery** from \`vcpkg.json\`:
+- 🚀 **C++20**: Modern C++ features (concepts, ranges, etc.)
+- 📦 **vcpkg**: Automatic package discovery and linking
+- 🧪 **Testing**: Catch2 integration (included)
+- 🔧 **Build Tools**: CMake + Ninja
+- 🎨 **Code Quality**: clang-format and clang-tidy support
 
-### 📦 vcpkg Helper Functions
+---
 
-The project includes smart CMake helper functions that automatically:
-- Parse \`vcpkg.json\` to discover dependencies
-- Call \`find_package()\` for each dependency
-- Link libraries to targets automatically
-
-### Available Functions
-
-\`\`\`cmake
-# Automatically find all packages from vcpkg.json
-vcpkg_find_packages()
-
-# Link all found packages to a target
-vcpkg_link_libraries(target_name PRIVATE|PUBLIC)
-
-# Link specific packages only
-vcpkg_link_specific(target_name PRIVATE|PUBLIC package1 package2...)
-
-# Check if package is available
-vcpkg_has_package(package_name result_var)
-
-# List all available packages
-vcpkg_list_packages()
-\`\`\`
-
-### Supported Packages
-
-The helper functions support common packages like:
-- **fmt**: Modern formatting library
-- **spdlog**: Fast logging library"
-if [[ "$USE_TESTING" == "true" ]]; then
-echo "- **Catch2**: Testing framework"
-fi
-echo "- **boost**: Boost libraries
-- **opencv**: Computer vision library
-- **eigen3**: Linear algebra library
-- **nlohmann-json**: JSON library
-- **And many more...**
-
-### Adding New Dependencies
-
-1. Add package to \`vcpkg.json\`:
-\`\`\`json
-{
-  \"dependencies\": [
-    \"fmt\",
-    \"spdlog\",
-    \"your-new-package\"
-  ]
-}
-\`\`\`
-
-2. The helper functions will automatically discover and link it!
-
-**How it works:**
-- ✅ **Known packages** (fmt, spdlog, boost, etc.) use pre-defined mappings
-- 🔍 **Unknown packages** are discovered using intelligent naming patterns
-- 🔧 **Complex packages** can use custom mappings:
-
-\`\`\`cmake
-# For packages with non-standard naming
-vcpkg_add_package_mapping(weird-lib WeirdLibrary WeirdLibrary::core)
-vcpkg_find_packages()
-\`\`\`
-
-**No manual \`find_package()\` or \`target_link_libraries()\` needed!**"
-fi)
-
-## Building
-
-### With vcpkg (Recommended)
-
-\`\`\`bash
-# Install vcpkg if not already installed
-git clone https://github.com/Microsoft/vcpkg.git
-cd vcpkg && ./bootstrap-vcpkg.sh
-export VCPKG_ROOT=\$(pwd)
-
-# Build project
-cmake -B build -DCMAKE_TOOLCHAIN_FILE=\$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake
-cmake --build build
-\`\`\`
-
-### Manual Dependencies
-
-If you prefer to manage dependencies manually, disable vcpkg:
-
-\`\`\`bash
-cmake -B build -DUSE_VCPKG=OFF
-cmake --build build
-\`\`\`
-
-## Testing
-
-\`\`\`bash
-# Run all tests
-cd build && ctest
-
-# Run with verbose output
-cd build && ctest --verbose
-
-# Run specific test
-cd build && ctest -R "test_name"
-\`\`\`
-
-## Code Quality
-
-### Formatting
-
-\`\`\`bash
-# Format all code
-./scripts/dev.sh format
-\`\`\`
-
-### Static Analysis
-
-\`\`\`bash
-# Run clang-tidy
-./scripts/dev.sh analyze
-\`\`\`
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests for new functionality
-5. Ensure all tests pass
-6. Submit a pull request
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
+**Created with [🚀 setup_cpp20](https://github.com/danielsalles/setup_cpp20) - The complete C++20 development environment**
 README_EOF
-    
-    # Create basic docs
-    cat > docs/API.md << 'API_EOF'
-# API Documentation
-
-## Overview
-
-This document describes the public API of the library and the vcpkg helper functions.
-
-## 📦 vcpkg Helper Functions
-
-### vcpkg_find_packages()
-
-Automatically parses `vcpkg.json` and calls `find_package()` for all dependencies.
-
-**Features:**
-- 🎯 **Smart Discovery**: Tries multiple naming patterns for unknown packages
-- 📋 **Known Mappings**: Uses pre-defined mappings for popular packages  
-- 🔧 **Custom Mappings**: Supports user-defined package mappings
-- 🔍 **Intelligent Guessing**: Attempts various case combinations and naming patterns
-- 📄 **JSON Parsing**: Uses `jq` for reliable JSON parsing (install with `brew install jq`)
-
-**Requirements:**
-- `jq` command-line JSON processor (recommended for best results)
-- Falls back gracefully if `jq` is not available
-
-```cmake
-# Call this once in your main CMakeLists.txt
-vcpkg_find_packages()
-```
-
-### vcpkg_add_package_mapping(package find_name target)
-
-Adds a custom mapping for packages not in the known list.
-
-```cmake
-# Add custom mapping before calling vcpkg_find_packages()
-vcpkg_add_package_mapping(my-special-lib MySpecialLib MySpecialLib::core)
-vcpkg_find_packages()
-```
-
-### vcpkg_link_libraries(target visibility)
-
-Links all found vcpkg packages to a target.
-
-```cmake
-# Link all packages to your target
-vcpkg_link_libraries(my_target PRIVATE)
-vcpkg_link_libraries(my_library PUBLIC)
-```
-
-### vcpkg_link_specific(target visibility packages...)
-
-Links only specific packages to a target.
-
-```cmake
-# Link only fmt and spdlog
-vcpkg_link_specific(my_target PRIVATE fmt spdlog)
-```
-
-### vcpkg_has_package(package result_var)
-
-Checks if a package is available.
-
-```cmake
-vcpkg_has_package(fmt HAS_FMT)
-if(HAS_FMT)
-    # Use fmt-specific features
-endif()
-```
-
-### vcpkg_list_packages()
-
-Lists all available packages (useful for debugging).
-
-```cmake
-vcpkg_list_packages()  # Prints to console
-```
-
-## 🎯 Library Classes
-
-### Calculator
-
-Main calculator class providing mathematical operations.
-
-#### Methods
-
-- `add(T a, T b) -> T`: Adds two numbers
-- `multiply(T a, T b) -> T`: Multiplies two numbers  
-- `process_vector(const std::vector<T>&) -> std::vector<T>`: Processes vector
-
-## 🔧 Utility Functions
-
-- `sum_positive(const std::vector<T>&) -> T`: Sums positive numbers
-- `filter_and_transform(const std::vector<T>&) -> std::vector<T>`: Filters and transforms
-
-## 📝 Example Usage
-
-### Basic CMakeLists.txt with vcpkg helpers
-
-```cmake
-cmake_minimum_required(VERSION 3.25)
-project(MyProject)
-
-# Include vcpkg helpers
-include(cmake/VcpkgHelpers.cmake)
-
-# Add custom mappings for packages not in known list (optional)
-vcpkg_add_package_mapping(my-special-lib MySpecialLib MySpecialLib::core)
-
-# Automatically find all packages from vcpkg.json
-vcpkg_find_packages()
-
-# Create your target
-add_executable(my_app src/main.cpp)
-
-# Link all vcpkg packages automatically
-vcpkg_link_libraries(my_app PRIVATE)
-
-# Or link specific packages only
-# vcpkg_link_specific(my_app PRIVATE fmt spdlog)
-```
-
-### Advanced Usage
-
-```cmake
-# Add custom mappings for complex packages
-vcpkg_add_package_mapping(weird-package-name WeirdPackage WeirdPackage::main)
-vcpkg_add_package_mapping(legacy-lib LegacyLibrary legacy::lib)
-
-# Find all packages (including custom ones)
-vcpkg_find_packages()
-
-# Check for optional packages
-vcpkg_has_package(opencv HAS_OPENCV)
-if(HAS_OPENCV)
-    target_compile_definitions(my_app PRIVATE HAS_OPENCV)
-    # OpenCV will be linked automatically by vcpkg_link_libraries
-endif()
-
-# List available packages for debugging
-vcpkg_list_packages()
-```
-
-### How It Works
-
-1. **JSON Parsing**: Uses `jq` for reliable parsing of `vcpkg.json`
-   - Handles both string and object dependencies
-   - Extracts package names and features correctly
-   - Falls back gracefully if `jq` is not available
-
-2. **Known Packages**: Uses pre-defined mappings for popular packages (fmt, spdlog, boost, etc.)
-
-3. **Custom Mappings**: Uses your custom mappings added with `vcpkg_add_package_mapping()`
-
-4. **Smart Discovery**: For unknown packages, tries multiple naming patterns:
-   - Exact name: `my-package` -> `find_package(my-package)`
-   - Title case: `my-package` -> `find_package(My-package)`
-   - Upper case: `my-package` -> `find_package(MY-PACKAGE)`
-   - With Config suffix: `my-package` -> `find_package(my-packageConfig)`
-
-5. **Target Guessing**: Tries common target naming patterns:
-   - `package::package`
-   - `Package::Package`
-   - `PACKAGE::PACKAGE`
-   - And fallbacks...
-
-6. **Complex Dependencies**: Supports vcpkg.json features like:
-   ```json
-   {
-     "dependencies": [
-       "fmt",
-       {
-         "name": "boost",
-         "features": ["system", "filesystem"]
-       }
-     ]
-   }
-   ```
-API_EOF
     
     log_success "Documentation created"
 }
@@ -1832,53 +1443,28 @@ show_completion() {
     cat << COMPLETION_EOF
 🎉 Modern C++20 project '${PROJECT_NAME}' created!
 
-📁 Project structure:
-  ${PROJECT_NAME}/
-  ├── src/                 # Source files
-  ├── include/             # Headers
-  ├── tests/               # Tests
-  ├── scripts/             # Build scripts  
-  ├── docs/                # Documentation
-  └── .github/workflows/   # CI/CD
+📁 Project: ${PROJECT_NAME}/ (${PROJECT_TYPE})
 
 🚀 Next steps:
   cd ${PROJECT_NAME}
-  
-  # Quick build and run
-  ./scripts/build.sh Release
-  
-  # Development workflow
+  ./scripts/build.sh
+
+📦 Add dependencies:
+  vcpkg-add fmt
+  vcpkg-add spdlog
+  vcpkg-add nlohmann-json
+
+🔧 Development:
   ./scripts/dev.sh build    # Debug build
   ./scripts/dev.sh test     # Run tests
   ./scripts/dev.sh format   # Format code
 
-📚 Features included:
-  ✅ Modern C++20 code examples
-  ✅ CMake configuration with best practices
-$(if [[ "$USE_VCPKG" == "true" ]]; then echo "  ✅ vcpkg with automatic package discovery"; fi)
-$(if [[ "$USE_TESTING" == "true" ]]; then echo "  ✅ Catch2 testing framework"; fi)
-  ✅ GitHub Actions CI/CD
-  ✅ Code formatting and static analysis
-  ✅ Comprehensive documentation
-
-$(if [[ "$USE_VCPKG" == "true" ]]; then echo "📦 vcpkg Helper Functions:
-  • vcpkg_find_packages()     - Auto-discover from vcpkg.json
-  • vcpkg_link_libraries()    - Auto-link all packages
-  • vcpkg_link_specific()     - Link specific packages
-  • vcpkg_has_package()       - Check package availability
-  • vcpkg_add_package_mapping() - Add custom mappings
-
-🧠 Smart Discovery:
-  • Known packages: Instant recognition
-  • Unknown packages: Intelligent naming pattern matching
-  • Custom mappings: For complex package names
-
-"; fi)💡 Customize:
-  - Edit CMakeLists.txt for build options
-  - Modify vcpkg.json for dependencies
-  - Add your code in src/ and include/
-  - Write tests in tests/
-$(if [[ "$USE_VCPKG" == "true" ]]; then echo "  - Use helper functions for easy package management"; fi)
+📚 Features:
+  ✅ C++20 with concepts and ranges
+  ✅ vcpkg with automatic package discovery
+  ✅ Catch2 testing framework
+  ✅ Modern CMake configuration
+  ✅ Build scripts and code formatting
 
 Happy coding! 🎯
 COMPLETION_EOF
@@ -1890,7 +1476,7 @@ main() {
     get_project_info
     
     log_info "Creating C++20 project: $PROJECT_NAME"
-    log_info "Type: $PROJECT_TYPE | vcpkg: $USE_VCPKG | Testing: $USE_TESTING"
+    log_info "Type: $PROJECT_TYPE | vcpkg: enabled | Testing: enabled"
     echo
     
     create_project_structure
