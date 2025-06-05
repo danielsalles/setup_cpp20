@@ -387,26 +387,19 @@ initialize_vcpkg_manifest() {
     # Get project name from the current directory if PROJECT_NAME variable isn't set
     # (should be set, but as a fallback)
     local manifest_project_name="${PROJECT_NAME:-$(basename "$(pwd)")}"
+    
+    # Convert to lowercase using tr (more compatible than ${var,,})
+    local lowercase_name=$(echo "$manifest_project_name" | tr '[:upper:]' '[:lower:]')
 
     cat > vcpkg.json << EOF
 {
-  "name": "${manifest_project_name,,}",
+  "name": "$lowercase_name",
   "version-string": "1.0.0",
-  "description": "Dependencies for ${manifest_project_name}",
+  "description": "Dependencies for $manifest_project_name",
   "dependencies": [
-    // Add initial dependencies here, e.g.:
-    // {
-    //   "name": "fmt",
-    //   "version>=": "9.1.0"
-    // },
-    // "catch2"
-  ],
-  "builtin-baseline": "0000000000000000000000000000000000000000" 
+  ]
 }
 EOF
-    # The builtin-baseline is a placeholder. Users should update it via 'vcpkg x-update-baseline'
-    # or by referencing a specific vcpkg commit if they use versioning with baselines.
-    # For new projects, a zeroed baseline allows using the latest versions of packages initially.
 
     log_success "vcpkg.json created successfully."
 }
