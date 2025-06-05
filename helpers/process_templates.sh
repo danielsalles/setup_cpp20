@@ -22,6 +22,30 @@ DESCRIPTION=""
 NO_SHARED=false
 VERBOSE=false
 
+# Repository configuration for remote access
+REPO_BASE="https://raw.githubusercontent.com/danielsalles/setup_cpp20/main"
+TEMPLATES_BASE="$REPO_BASE/templates"
+
+# Local file paths (will be used if available, or downloaded if not)
+TEMPLATE_PROCESSOR="$SCRIPT_DIR/template_processor.py"
+LOCAL_TEMPLATES_DIR="$PROJECT_ROOT/templates"
+
+# Temporary directory for downloads
+TEMP_DIR=""
+
+# Cleanup function
+cleanup() {
+    if [[ -n "${TEMP_DIR:-}" && -d "$TEMP_DIR" ]]; then
+        rm -rf "$TEMP_DIR"
+    fi
+}
+
+# Set trap for cleanup
+trap cleanup EXIT
+
+# Default values - updated to use detection
+TEMPLATES_DIR=""
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -60,7 +84,7 @@ ARGUMENTS:
 OPTIONS:
     -o, --output DIR        Output directory (default: current directory)
     -c, --config FILE       JSON configuration file with template variables
-    -t, --templates DIR     Templates directory (default: $TEMPLATES_DIR)
+    -t, --templates DIR     Templates directory (default: auto-detect or download)
     --author NAME           Project author name
     --version VERSION       Project version (e.g., 1.0.0)
     --description TEXT      Project description
@@ -97,15 +121,118 @@ check_dependencies() {
         exit 1
     fi
     
-    if [[ ! -f "$TEMPLATE_PROCESSOR" ]]; then
-        print_error "Template processor not found: $TEMPLATE_PROCESSOR"
+    # Check if we have local files or need to download them
+    if [[ -f "$TEMPLATE_PROCESSOR" && -d "$LOCAL_TEMPLATES_DIR" ]]; then
+        print_info "Using local template system"
+        TEMPLATES_DIR="$LOCAL_TEMPLATES_DIR"
+        USE_LOCAL=true
+    else
+        print_info "Local template system not found, downloading from repository"
+        USE_LOCAL=false
+        download_template_system
+    fi
+}
+
+# Function to download template system when not available locally
+download_template_system() {
+    print_info "Downloading template processing system..."
+    
+    # Create temporary directory
+    TEMP_DIR=$(mktemp -d)
+    
+    # Download template processor
+    print_info "Downloading template_processor.py..."
+    if ! curl -fsSL "$REPO_BASE/helpers/template_processor.py" -o "$TEMP_DIR/template_processor.py"; then
+        print_error "Failed to download template processor"
         exit 1
     fi
     
-    if [[ ! -d "$TEMPLATES_DIR" ]]; then
-        print_error "Templates directory not found: $TEMPLATES_DIR"
-        exit 1
-    fi
+    # Update the template processor path to use temp directory
+    TEMPLATE_PROCESSOR="$TEMP_DIR/template_processor.py"
+    
+    # Download templates directory structure
+    print_info "Downloading templates..."
+    
+    # Create templates directory in temp
+    mkdir -p "$TEMP_DIR/templates"
+    TEMPLATES_DIR="$TEMP_DIR/templates"
+    
+    # Download console templates
+    download_template_files "console"
+    
+    # Download library templates
+    download_template_files "library"
+    
+    # Download shared templates
+    download_shared_templates
+    
+    print_success "Template system downloaded successfully"
+}
+
+# Function to download template files for a specific project type
+download_template_files() {
+    local project_type="$1"
+    local template_dir="$TEMPLATES_DIR/$project_type"
+    
+    print_info "Downloading $project_type templates..."
+    mkdir -p "$template_dir"
+    
+    # Download main project files for the template type
+    local base_url="$TEMPLATES_BASE/$project_type"
+    
+    # Common files for both console and library
+    local files=(
+        "CMakeLists.txt.template"
+        ".gitignore.template"
+        "README.md.template"
+        "vcpkg.json.template"
+    )
+    
+    # Add type-specific files
+    case "$project_type" in
+        "console")
+            files+=("src/main.cpp.template")
+            ;;
+        "library")
+            files+=("src/library.cpp.template" "include/library.hpp.template")
+            ;;
+    esac
+    
+    for file in "${files[@]}"; do
+        local dest_file="$template_dir/$file"
+        mkdir -p "$(dirname "$dest_file")"
+        
+        if ! curl -fsSL "$base_url/$file" -o "$dest_file" 2>/dev/null; then
+            print_warning "Could not download $file, skipping..."
+        fi
+    done
+}
+
+# Function to download shared templates
+download_shared_templates() {
+    print_info "Downloading shared templates..."
+    
+    local shared_dir="$TEMPLATES_DIR/shared"
+    mkdir -p "$shared_dir"
+    
+    # Download critical shared files
+    local shared_files=(
+        "cmake/CompilerWarnings.cmake.template"
+        "cmake/VcpkgHelpers.cmake.template"
+        "scripts/build.sh.template"
+        "scripts/test.sh.template"
+        ".clang-format.template"
+        "Doxyfile.template"
+    )
+    
+    for file in "${shared_files[@]}"; do
+        local dest_file="$shared_dir/$file"
+        mkdir -p "$(dirname "$dest_file")"
+        
+        if ! curl -fsSL "$TEMPLATES_BASE/shared/$file" -o "$dest_file" 2>/dev/null; then
+            print_warning "Could not download shared/$file, skipping..."
+        fi
+    done
 }
 
 # Function to validate project type
@@ -148,10 +275,10 @@ parse_arguments() {
                 CONFIG_FILE="$2"
                 shift 2
                 ;;
-            -t|--templates)
-                TEMPLATES_DIR="$2"
-                shift 2
-                ;;
+                    -t|--templates)
+            LOCAL_TEMPLATES_DIR="$2"
+            shift 2
+            ;;
             --author)
                 AUTHOR="$2"
                 shift 2
