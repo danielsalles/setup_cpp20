@@ -523,7 +523,7 @@ commit_changes() {
         fi
     done
     
-    if [[ ${#files_to_add[@]} -gt 0 ]]; then
+    if [[ {% raw %}${#files_to_add[@]}{% endraw %} -gt 0 ]]; then
         git add "${files_to_add[@]}"
         
         local commit_message="chore: bump version to $new_version"

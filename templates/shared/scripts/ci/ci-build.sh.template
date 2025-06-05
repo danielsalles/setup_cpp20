@@ -143,7 +143,7 @@ check_prerequisites() {
         fi
     done
     
-    if [[ ${#missing_tools[@]} -gt 0 ]]; then
+    if [[ {% raw %}${#missing_tools[@]}{% endraw %} -gt 0 ]]; then
         log_error "Missing required tools: ${missing_tools[*]}"
         return 1
     fi

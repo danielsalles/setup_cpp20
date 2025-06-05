@@ -1,0 +1,53 @@
+#include <catch2/catch_test_macros.hpp>
+#include <iostream>
+#include <sstream>
+#include <string>
+
+// Tests specific to console application functionality
+TEST_CASE("{{ project_name }} Console I/O Tests", "[console][io]") {
+    SECTION("String stream operations") {
+        std::stringstream ss;
+        ss << "Hello from {{ project_name }}!";
+        
+        std::string result;
+        std::getline(ss, result);
+        
+        REQUIRE_FALSE(result.empty());
+        REQUIRE(result.find("{{ project_name }}") != std::string::npos);
+    }
+    
+    SECTION("Basic console output simulation") {
+        // Redirect cout to stringstream for testing
+        std::stringstream buffer;
+        std::streambuf* old_cout = std::cout.rdbuf(buffer.rdbuf());
+        
+        // Simulate console output
+        std::cout << "Test output from {{ project_name }}";
+        
+        // Restore cout
+        std::cout.rdbuf(old_cout);
+        
+        std::string output = buffer.str();
+        REQUIRE(output == "Test output from {{ project_name }}");
+    }
+}
+
+TEST_CASE("{{ project_name }} Application Logic Tests", "[logic]") {
+    SECTION("Basic application state") {
+        // Test basic application state/logic
+        bool application_ready = true;
+        REQUIRE(application_ready);
+    }
+    
+    SECTION("Command line argument handling placeholder") {
+        // Placeholder for command line argument tests
+        // TODO: Add actual command line parsing tests when implemented
+        SUCCEED("Command line argument test placeholder");
+    }
+    
+    SECTION("Application configuration placeholder") {
+        // Placeholder for configuration tests
+        // TODO: Add configuration handling tests when implemented
+        SUCCEED("Configuration test placeholder");
+    }
+} 

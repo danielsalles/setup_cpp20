@@ -307,7 +307,7 @@ check_requirements() {
         fi
     fi
     
-    if [[ ${#missing_tools[@]} -ne 0 ]]; then
+    if [[ {% raw %}${#missing_tools[@]}{% endraw %} -ne 0 ]]; then
         log_error "Missing required tools: ${missing_tools[*]}"
         exit 1
     fi
@@ -618,7 +618,7 @@ run_valgrind_tests() {
         test_executables+=("$test_exe")
     done < <(find . -name "*test*" -type f -executable -print0)
     
-    if [[ ${#test_executables[@]} -eq 0 ]]; then
+    if [[ {% raw %}${#test_executables[@]}{% endraw %} -eq 0 ]]; then
         log_warning "No test executables found for Valgrind analysis"
         return
     fi
@@ -821,7 +821,7 @@ run_benchmarks() {
         benchmark_executables+=("$bench_exe")
     done < <(find . -name "*benchmark*" -o -name "*bench*" -type f -executable -print0)
     
-    if [[ ${#benchmark_executables[@]} -eq 0 ]]; then
+    if [[ {% raw %}${#benchmark_executables[@]}{% endraw %} -eq 0 ]]; then
         log_warning "No benchmark executables found"
         return
     fi

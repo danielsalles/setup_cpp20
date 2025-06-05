@@ -1,0 +1,57 @@
+#include <catch2/catch_test_macros.hpp>
+#include <{{ project_name | to_cpp_identifier | lower }}/{{ project_name | to_cpp_identifier | lower }}.hpp>
+
+// Tests for the specific library functionality
+TEST_CASE("{{ project_name }} Core Library Tests", "[library][core]") {
+    SECTION("Library header can be included") {
+        // Test that the main library header includes successfully
+        SUCCEED("{{ project_name | to_cpp_identifier | lower }}.hpp included successfully");
+    }
+    
+    SECTION("Library public API accessibility") {
+        // TODO: Add tests for your library's public API
+        // Example:
+        // auto instance = {{ project_name | to_cpp_identifier | lower }}::create_instance();
+        // REQUIRE(instance != nullptr);
+        
+        // For now, just verify library structure compiles
+        SUCCEED("Library public API accessible");
+    }
+    
+    SECTION("Library version information") {
+        // TODO: If your library provides version info, test it here
+        // Example:
+        // auto version = {{ project_name | to_cpp_identifier | lower }}::get_version();
+        // REQUIRE(version.major >= 1);
+        
+        SUCCEED("Library version test placeholder");
+    }
+}
+
+TEST_CASE("{{ project_name }} Library Implementation Tests", "[library][implementation]") {
+    SECTION("Core library functionality") {
+        // TODO: Add specific tests for your library's core functionality
+        // Replace these placeholders with actual tests based on your library's features
+        
+        SUCCEED("Core library functionality test placeholder");
+    }
+    
+    SECTION("Library error handling") {
+        // TODO: Add tests for error handling and edge cases
+        // Example:
+        // REQUIRE_THROWS_AS({{ project_name | to_cpp_identifier | lower }}::invalid_operation(), std::invalid_argument);
+        
+        SUCCEED("Library error handling test placeholder");
+    }
+    
+    SECTION("Library performance characteristics") {
+        // TODO: Add basic performance or behavior tests
+        // Example timing or resource usage tests can go here
+        
+        SUCCEED("Library performance test placeholder");
+    }
+}
+
+// TODO: Replace these placeholder tests with actual tests specific to your library's functionality
+// The library header {{ project_name | to_cpp_identifier | lower }}/{{ project_name | to_cpp_identifier | lower }}.hpp is expected to exist
+// and contain your library's public interface. 

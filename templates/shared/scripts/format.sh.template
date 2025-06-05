@@ -233,7 +233,7 @@ find_source_files() {
     find_args+=("(")
     for i in "${!file_extensions[@]}"; do
         find_args+=("-name" "${file_extensions[$i]}")
-        if [[ $i -lt $((${#file_extensions[@]} - 1)) ]]; then
+        if [[ $i -lt $(({% raw %}${#file_extensions[@]}{% endraw %} - 1)) ]]; then
             find_args+=("-o")
         fi
     done
@@ -652,7 +652,7 @@ main() {
     else
         # Use specified paths or default to project root
         local search_paths=("$@")
-        if [[ ${#search_paths[@]} -eq 0 ]]; then
+        if [[ {% raw %}${#search_paths[@]}{% endraw %} -eq 0 ]]; then
             search_paths=("$PROJECT_ROOT")
         fi
         
@@ -662,12 +662,12 @@ main() {
         done < <(find_source_files "${search_paths[@]}")
     fi
     
-    if [[ ${#files_to_format[@]} -eq 0 ]]; then
+    if [[ {% raw %}${#files_to_format[@]}{% endraw %} -eq 0 ]]; then
         log_warning "No source files found to format"
         exit 0
     fi
     
-    log_info "Found ${#files_to_format[@]} source files to process"
+    log_info "Found {% raw %}${#files_to_format[@]}{% endraw %} source files to process"
     
     # Format files
     local failed_files=()
@@ -685,24 +685,24 @@ main() {
     if [[ "$QUIET" != true ]]; then
         echo
         if [[ "$CHECK_ONLY" == true ]]; then
-            if [[ ${#failed_files[@]} -eq 0 ]]; then
-                log_success "All ${#files_to_format[@]} files are properly formatted"
+            if [[ {% raw %}${#failed_files[@]}{% endraw %} -eq 0 ]]; then
+                log_success "All {% raw %}${#files_to_format[@]}{% endraw %} files are properly formatted"
             else
-                log_warning "${#failed_files[@]} files need formatting:"
+                log_warning "{% raw %}${#failed_files[@]}{% endraw %} files need formatting:"
                 printf '  %s\n' "${failed_files[@]}"
             fi
         else
-            if [[ ${#failed_files[@]} -eq 0 ]]; then
-                log_success "Successfully formatted ${#files_to_format[@]} files"
+            if [[ {% raw %}${#failed_files[@]}{% endraw %} -eq 0 ]]; then
+                log_success "Successfully formatted {% raw %}${#files_to_format[@]}{% endraw %} files"
             else
-                log_error "Failed to format ${#failed_files[@]} files"
+                log_error "Failed to format {% raw %}${#failed_files[@]}{% endraw %} files"
                 printf '  %s\n' "${failed_files[@]}"
             fi
         fi
     fi
     
     # Exit with appropriate code
-    if [[ ${#failed_files[@]} -gt 0 ]]; then
+    if [[ {% raw %}${#failed_files[@]}{% endraw %} -gt 0 ]]; then
         exit 1
     else
         exit 0

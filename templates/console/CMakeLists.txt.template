@@ -102,12 +102,16 @@ target_include_directories({{ project_name }}
         # Add include/{{ project_name }} if you create that structure
 )
 
-# Enable testing
-enable_testing()
+# Testing configuration
+option(BUILD_TESTING "Build the testing tree" OFF)
 
-# Add tests if test directory exists
-if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/tests)
-    add_subdirectory(tests)
+if(BUILD_TESTING)
+    enable_testing()
+    
+    # Add tests if test directory exists
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/tests)
+        add_subdirectory(tests)
+    endif()
 endif()
 
 # Installation rules

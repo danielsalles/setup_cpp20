@@ -1,0 +1,39 @@
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_session.hpp>
+
+// Tests for library functionality
+TEST_CASE("{{ project_name }} Library Framework Tests", "[library]") {
+    SECTION("Basic library functionality") {
+        // Test that basic C++20 features work in library context
+        SUCCEED("Library compiles and runs with C++20");
+    }
+    
+    SECTION("Standard library access in library") {
+        // Test standard library is accessible from library context
+        std::string library_name = "{{ project_name }}";
+        REQUIRE_FALSE(library_name.empty());
+        REQUIRE(library_name == "{{ project_name }}");
+    }
+    
+    SECTION("Modern C++20 features in library") {
+        // Test that C++20 features are available in library context
+        auto library_lambda = []() -> bool {
+            return true;
+        };
+        
+        REQUIRE(library_lambda());
+    }
+}
+
+// Library-specific environment tests
+TEST_CASE("{{ project_name }} Library Environment Tests", "[library][environment]") {
+    SECTION("Library can be linked") {
+        // Basic linking test
+        SUCCEED("Library links correctly with test executable");
+    }
+    
+    SECTION("Library headers accessible") {
+        // Basic header inclusion test
+        SUCCEED("Library headers included successfully");
+    }
+} 

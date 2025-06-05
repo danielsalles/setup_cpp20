@@ -167,7 +167,7 @@ find_source_files() {
     local search_dirs=("$PROJECT_ROOT/src" "$PROJECT_ROOT/lib" "$PROJECT_ROOT/source" "$PROJECT_ROOT")
     
     # If specific files/directories provided, use those
-    if [[ ${#ANALYZE_PATHS[@]} -gt 0 ]]; then
+    if [[ {% raw %}${#ANALYZE_PATHS[@]}{% endraw %} -gt 0 ]]; then
         for path in "${ANALYZE_PATHS[@]}"; do
             if [[ -f "$path" ]]; then
                 # It's a file
@@ -200,12 +200,12 @@ find_source_files() {
         done
     fi
     
-    if [[ ${#source_files[@]} -eq 0 ]]; then
+    if [[ {% raw %}${#source_files[@]}{% endraw %} -eq 0 ]]; then
         log_error "No source files found for analysis"
         return 1
     fi
     
-    log_debug "Found ${#source_files[@]} source files for analysis"
+    log_debug "Found {% raw %}${#source_files[@]}{% endraw %} source files for analysis"
     printf '%s\n' "${source_files[@]}"
 }
 
@@ -350,7 +350,7 @@ run_analysis() {
         eval "tidy_args+=($EXTRA_ARGS)"
     fi
     
-    local total_files=${#source_files[@]}
+    local total_files={% raw %}${#source_files[@]}{% endraw %}
     local current_file=0
     local issues_found=0
     local files_with_issues=0
@@ -585,7 +585,7 @@ show_config() {
         echo "  Checks: $CHECKS"
     fi
     
-    if [[ ${#ANALYZE_PATHS[@]} -gt 0 ]]; then
+    if [[ {% raw %}${#ANALYZE_PATHS[@]}{% endraw %} -gt 0 ]]; then
         echo "  Analyze Paths: ${ANALYZE_PATHS[*]}"
     fi
 }

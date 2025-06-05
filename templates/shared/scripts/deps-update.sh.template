@@ -209,7 +209,7 @@ upgrade_packages() {
     shift
     local packages=("$@")
     
-    if [[ ${#packages[@]} -eq 0 ]]; then
+    if [[ {% raw %}${#packages[@]}{% endraw %} -eq 0 ]]; then
         log_debug "No specific packages to upgrade"
         return 0
     fi
@@ -619,7 +619,7 @@ main() {
     
     # Update dependencies
     if [[ "$UPDATE_DEPS_ONLY" == true ]] || [[ "$UPDATE_ALL" == true ]]; then
-        if [[ ${#UPDATE_PACKAGES[@]} -gt 0 ]]; then
+        if [[ {% raw %}${#UPDATE_PACKAGES[@]}{% endraw %} -gt 0 ]]; then
             upgrade_packages "$vcpkg_cmd" "${UPDATE_PACKAGES[@]}"
         else
             update_vcpkg_dependencies "$vcpkg_cmd"

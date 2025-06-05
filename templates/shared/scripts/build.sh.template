@@ -337,7 +337,7 @@ esac
 # Auto-detect generator if not specified
 if [[ -z "$GENERATOR" ]]; then
     available_generators=($(detect_build_tools))
-    if [[ ${#available_generators[@]} -gt 0 ]]; then
+    if [[ {% raw %}${#available_generators[@]}{% endraw %} -gt 0 ]]; then
         GENERATOR="${available_generators[0]}"
         log_debug "Auto-selected generator: $GENERATOR"
     else
@@ -395,7 +395,7 @@ check_requirements() {
             ;;
     esac
     
-    if [[ ${#missing_tools[@]} -ne 0 ]]; then
+    if [[ {% raw %}${#missing_tools[@]}{% endraw %} -ne 0 ]]; then
         log_error "Missing required tools: ${missing_tools[*]}"
         log_info "Please install the missing tools and try again"
         exit 1

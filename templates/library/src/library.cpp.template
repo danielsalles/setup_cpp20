@@ -9,7 +9,7 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 #endif
 
-namespace {{ project_name | lower }} {
+namespace {{ project_name | to_cpp_identifier | lower }} {
 
 namespace {
     // Internal helper functions
@@ -272,4 +272,4 @@ void demonstrate_features() {
     log_info("{{ project_name }} library demonstration completed");
 }
 
-} // namespace {{ project_name | lower }} 
+} // namespace {{ project_name | to_cpp_identifier | lower }} 

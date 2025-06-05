@@ -1,0 +1,70 @@
+# {{ project_name }} Library Tests Configuration
+# Library-specific test setup
+
+# Test executable for library
+set(TEST_SOURCES
+    test_main.cpp
+    test_library.cpp
+)
+
+# Create test executable
+add_executable({{ project_name }}_tests ${TEST_SOURCES})
+
+# Link with the library and Catch2
+target_link_libraries({{ project_name }}_tests 
+    PRIVATE 
+    {{ project_name }}::{{ project_name }}
+    Catch2::Catch2WithMain
+)
+
+# Include directories
+target_include_directories({{ project_name }}_tests 
+    PRIVATE 
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+)
+
+# Set C++20 standard for tests
+target_compile_features({{ project_name }}_tests PRIVATE cxx_std_20)
+
+# Configure test properties
+set_target_properties({{ project_name }}_tests PROPERTIES
+    CXX_STANDARD 20
+    CXX_STANDARD_REQUIRED ON
+    CXX_EXTENSIONS OFF
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests/bin
+)
+
+# Enable testing
+enable_testing()
+
+# Add tests to CTest
+add_test(
+    NAME {{ project_name }}_unit_tests
+    COMMAND {{ project_name }}_tests
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+)
+
+# Additional test configuration
+set_tests_properties({{ project_name }}_unit_tests PROPERTIES
+    TIMEOUT 60
+    LABELS "unit;library"
+)
+
+# Test coverage target (if enabled)
+if(ENABLE_COVERAGE)
+    target_compile_options({{ project_name }}_tests PRIVATE --coverage)
+    target_link_options({{ project_name }}_tests PRIVATE --coverage)
+endif()
+
+# Compiler warnings for tests
+if(ENABLE_WARNINGS)
+    target_compile_options({{ project_name }}_tests PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:
+            $<$<CXX_COMPILER_ID:GNU>:-Wall -Wextra -Wpedantic>
+            $<$<CXX_COMPILER_ID:Clang>:-Wall -Wextra -Wpedantic>
+            $<$<CXX_COMPILER_ID:MSVC>:/W4>
+        >
+    )
+endif() 

@@ -23,7 +23,7 @@
 #include <fmt/ranges.h>
 #endif
 
-namespace {{ project_name | lower }} {
+namespace {{ project_name | to_cpp_identifier | lower }} {
 
 /**
  * @brief Library version information
@@ -266,4 +266,4 @@ struct Statistics {
  */
 long long sum_span_elements(std::span<const int> data_span);
 
-} // namespace {{ project_name | lower }} 
+} // namespace {{ project_name | to_cpp_identifier | lower }} 

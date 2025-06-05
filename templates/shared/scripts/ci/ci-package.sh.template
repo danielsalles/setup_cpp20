@@ -204,12 +204,12 @@ check_packaging_tools() {
     done
     
     # Report results
-    if [[ ${#missing_required[@]} -gt 0 ]]; then
+    if [[ {% raw %}${#missing_required[@]}{% endraw %} -gt 0 ]]; then
         log_error "Missing required tools: ${missing_required[*]}"
         return 1
     fi
     
-    if [[ ${#missing_optional[@]} -gt 0 ]]; then
+    if [[ {% raw %}${#missing_optional[@]}{% endraw %} -gt 0 ]]; then
         log_warning "Missing optional tools: ${missing_optional[*]}"
         log_info "Some package formats will be skipped"
     fi
@@ -537,7 +537,7 @@ create_checksums() {
         package_files+=("$file")
     done < <(find . -maxdepth 1 -name "*.tar.gz" -o -name "*.zip" -o -name "*.deb" -o -name "*.rpm" -print0)
     
-    if [[ ${#package_files[@]} -eq 0 ]]; then
+    if [[ {% raw %}${#package_files[@]}{% endraw %} -eq 0 ]]; then
         log_warning "No package files found for checksums"
         return 0
     fi

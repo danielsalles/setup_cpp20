@@ -174,13 +174,13 @@ check_validation_tools() {
     done
     
     # Report results
-    if [[ ${#missing_required[@]} -gt 0 ]]; then
+    if [[ {% raw %}${#missing_required[@]}{% endraw %} -gt 0 ]]; then
         log_error "Missing required tools: ${missing_required[*]}"
         end_validation "Checking validation tools" "FAILED"
         return 1
     fi
     
-    if [[ ${#missing_optional[@]} -gt 0 ]]; then
+    if [[ {% raw %}${#missing_optional[@]}{% endraw %} -gt 0 ]]; then
         log_warning "Missing optional tools: ${missing_optional[*]}"
         log_info "Some validation checks will be skipped"
     fi
@@ -212,12 +212,12 @@ find_source_files() {
         fi
     done
     
-    if [[ ${#source_files[@]} -eq 0 ]]; then
+    if [[ {% raw %}${#source_files[@]}{% endraw %} -eq 0 ]]; then
         log_warning "No source files found for validation"
         return 1
     fi
     
-    log_debug "Found ${#source_files[@]} source files for validation"
+    log_debug "Found {% raw %}${#source_files[@]}{% endraw %} source files for validation"
     printf '%s\n' "${source_files[@]}"
 }
 
@@ -252,7 +252,7 @@ check_formatting() {
     local issues_found=0
     local files_checked=0
     
-    log_info "Checking code formatting for ${#source_files[@]} files..."
+    log_info "Checking code formatting for {% raw %}${#source_files[@]}{% endraw %} files..."
     
     if [[ "${DRY_RUN:-false}" == "true" ]]; then
         log_info "DRY RUN: Would check formatting with clang-format"
@@ -265,7 +265,7 @@ check_formatting() {
         ((files_checked++))
         
         if [[ "${QUIET:-false}" != "true" ]]; then
-            printf "\r${BLUE}[INFO]${NC} Checking file %d/%d: %s" "$files_checked" "${#source_files[@]}" "$(basename "$file")"
+            printf "\r${BLUE}[INFO]${NC} Checking file %d/%d: %s" "$files_checked" "{% raw %}${#source_files[@]}{% endraw %}" "$(basename "$file")"
         fi
         
         # Check if file needs formatting

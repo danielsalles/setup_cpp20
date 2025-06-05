@@ -44,10 +44,22 @@ class TemplateProcessor:
         
         # Add custom filters
         self.env.filters['default'] = self._default_filter
+        self.env.filters['to_cpp_identifier'] = self._to_cpp_identifier_filter
         
     def _default_filter(self, value: Any, default_value: Any = '') -> Any:
         """Custom default filter for Jinja2 templates."""
         return value if value is not None and value != '' else default_value
+    
+    def _to_cpp_identifier_filter(self, value: str) -> str:
+        """Convert string to valid C++ identifier by replacing hyphens with underscores."""
+        if not value:
+            return value
+        # Replace hyphens with underscores
+        result = value.replace('-', '_')
+        # Ensure it starts with letter or underscore (basic validation)
+        if result and not (result[0].isalpha() or result[0] == '_'):
+            result = '_' + result
+        return result
     
     def get_default_variables(self, project_type: str = "console") -> Dict[str, Any]:
         """

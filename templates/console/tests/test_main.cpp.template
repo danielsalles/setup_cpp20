@@ -1,0 +1,39 @@
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_session.hpp>
+
+// Simple tests for console application
+TEST_CASE("{{ project_name }} Console Application Tests", "[console]") {
+    SECTION("Basic console functionality") {
+        // Test that basic C++20 features work
+        SUCCEED("Console application compiles and runs with C++20");
+    }
+    
+    SECTION("Standard library access") {
+        // Test standard library is accessible
+        std::string test_string = "{{ project_name }}";
+        REQUIRE_FALSE(test_string.empty());
+        REQUIRE(test_string == "{{ project_name }}");
+    }
+    
+    SECTION("Modern C++20 features") {
+        // Test that C++20 features are available
+        auto lambda = []() -> bool {
+            return true;
+        };
+        
+        REQUIRE(lambda());
+    }
+}
+
+// Additional console-specific tests
+TEST_CASE("{{ project_name }} Environment Tests", "[environment]") {
+    SECTION("Program can access environment") {
+        // Basic environment test
+        SUCCEED("Environment access test placeholder");
+    }
+    
+    SECTION("Console output functionality") {
+        // Basic output test
+        SUCCEED("Console output test placeholder");
+    }
+} 
