@@ -20,14 +20,34 @@ PROJECT_NAME="${1:-}"
 PROJECT_TYPE="${2:-console}"  # console, library
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SETUP_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Repository configuration for remote access
+REPO_BASE="https://raw.githubusercontent.com/danielsalles/setup_cpp20/main"
+TEMPLATES_BASE="$REPO_BASE/templates"
+
+# Local file paths (will be used if available, or downloaded if not)
 TEMPLATE_PROCESSOR="$SCRIPT_DIR/template_processor.py"
 PROCESS_TEMPLATES="$SCRIPT_DIR/process_templates.sh"
+TEMPLATES_DIR="$SETUP_ROOT/templates"
+
+# Temporary directory for downloads
+TEMP_DIR=$(mktemp -d)
 
 log_info() { echo -e "${BLUE}ℹ️  $*${NC}"; }
 log_success() { echo -e "${GREEN}✅ $*${NC}"; }
 log_warning() { echo -e "${YELLOW}⚠️  $*${NC}"; }
 log_error() { echo -e "${RED}❌ $*${NC}" >&2; }
 log_header() { echo -e "${PURPLE}🚀 $*${NC}"; }
+
+# Cleanup function
+cleanup() {
+    if [[ -n "${TEMP_DIR:-}" && -d "$TEMP_DIR" ]]; then
+        rm -rf "$TEMP_DIR"
+    fi
+}
+
+# Set trap for cleanup
+trap cleanup EXIT
 
 show_banner() {
     echo -e "${CYAN}"
@@ -52,20 +72,6 @@ EOF
 check_template_system() {
     log_info "Checking template system availability..."
     
-    # Check if template processor exists
-    if [[ ! -f "$TEMPLATE_PROCESSOR" ]]; then
-        log_error "Template processor not found: $TEMPLATE_PROCESSOR"
-        log_error "Please ensure the template processing system is available."
-        exit 1
-    fi
-    
-    # Check if process_templates script exists
-    if [[ ! -f "$PROCESS_TEMPLATES" ]]; then
-        log_error "Process templates script not found: $PROCESS_TEMPLATES"
-        log_error "Please ensure the template processing system is available."
-        exit 1
-    fi
-    
     # Check if Python 3 is available
     if ! command -v python3 &> /dev/null; then
         log_error "Python 3 is required but not installed"
@@ -79,13 +85,115 @@ check_template_system() {
         exit 1
     fi
     
-    # Check if templates directory exists
-    if [[ ! -d "$SETUP_ROOT/templates" ]]; then
-        log_error "Templates directory not found: $SETUP_ROOT/templates"
-        exit 1
+    # Check if we have local files or need to download them
+    if [[ -f "$TEMPLATE_PROCESSOR" && -d "$TEMPLATES_DIR" ]]; then
+        log_info "Using local template system"
+        USE_LOCAL=true
+    else
+        log_info "Local template system not found, will download from repository"
+        USE_LOCAL=false
+        download_template_system
     fi
     
     log_success "Template system is available and ready"
+}
+
+download_template_system() {
+    log_info "Downloading template processing system..."
+    
+    # Download template processor
+    log_info "Downloading template_processor.py..."
+    if ! curl -fsSL "$REPO_BASE/helpers/template_processor.py" -o "$TEMP_DIR/template_processor.py"; then
+        log_error "Failed to download template processor"
+        exit 1
+    fi
+    
+    # Update the template processor path to use temp directory
+    TEMPLATE_PROCESSOR="$TEMP_DIR/template_processor.py"
+    
+    # Download templates directory structure
+    log_info "Downloading templates..."
+    
+    # Create templates directory in temp
+    mkdir -p "$TEMP_DIR/templates"
+    TEMPLATES_DIR="$TEMP_DIR/templates"
+    
+    # Download console templates
+    download_template_files "console"
+    
+    # Download library templates
+    download_template_files "library"
+    
+    # Download shared templates
+    download_shared_templates
+    
+    log_success "Template system downloaded successfully"
+}
+
+download_template_files() {
+    local project_type="$1"
+    local template_dir="$TEMPLATES_DIR/$project_type"
+    
+    log_info "Downloading $project_type templates..."
+    mkdir -p "$template_dir"
+    
+    # Download main project files for the template type
+    local base_url="$TEMPLATES_BASE/$project_type"
+    
+    # Common files for both console and library
+    local files=(
+        "CMakeLists.txt.template"
+        ".gitignore.template"
+        "README.md.template"
+        "vcpkg.json.template"
+    )
+    
+    # Add type-specific files
+    case "$project_type" in
+        "console")
+            files+=("src/main.cpp.template")
+            ;;
+        "library")
+            files+=("src/library.cpp.template" "include/library.hpp.template")
+            ;;
+    esac
+    
+    for file in "${files[@]}"; do
+        local dest_file="$template_dir/$file"
+        mkdir -p "$(dirname "$dest_file")"
+        
+        log_info "  Downloading $file..."
+        if ! curl -fsSL "$base_url/$file" -o "$dest_file" 2>/dev/null; then
+            log_warning "  Could not download $file, skipping..."
+        fi
+    done
+}
+
+download_shared_templates() {
+    log_info "Downloading shared templates..."
+    
+    local shared_dir="$TEMPLATES_DIR/shared"
+    mkdir -p "$shared_dir"
+    
+    # Download critical shared files
+    local shared_files=(
+        "cmake/CompilerWarnings.cmake.template"
+        "cmake/VcpkgHelpers.cmake.template"
+        "scripts/build.sh.template"
+        "scripts/test.sh.template"
+        ".clang-format.template"
+        "Doxyfile.template"
+    )
+    
+    for file in "${shared_files[@]}"; do
+        local dest_file="$shared_dir/$file"
+        mkdir -p "$(dirname "$dest_file")"
+        
+        log_info "  Downloading shared/$file..."
+        if ! curl -fsSL "$TEMPLATES_BASE/shared/$file" -o "$dest_file" 2>/dev/null; then
+            log_warning "  Could not download shared/$file, skipping..."
+        fi
+    done
 }
 
 get_project_info() {
@@ -324,14 +432,31 @@ generate_project_from_templates() {
     # Use our template processing system
     log_info "Processing templates with Jinja2..."
     
-    if "$PROCESS_TEMPLATES" "$PROJECT_TYPE" "$PROJECT_NAME" \
-        --output "." \
-        --config "project_config.json" \
-        --verbose; then
-        log_success "Project generated from templates successfully"
+    # Choose the appropriate method based on what's available
+    if [[ "$USE_LOCAL" == true && -f "$PROCESS_TEMPLATES" ]]; then
+        # Use local wrapper script
+        log_info "Using local process_templates.sh wrapper..."
+        if "$PROCESS_TEMPLATES" "$PROJECT_TYPE" "$PROJECT_NAME" \
+            --output "." \
+            --config "project_config.json" \
+            --verbose; then
+            log_success "Project generated from templates successfully"
+        else
+            log_error "Failed to generate project from templates"
+            exit 1
+        fi
     else
-        log_error "Failed to generate project from templates"
-        exit 1
+        # Use Python template processor directly
+        log_info "Using Python template processor directly..."
+        if python3 "$TEMPLATE_PROCESSOR" "$PROJECT_TYPE" "$PROJECT_NAME" \
+            --output "." \
+            --config "project_config.json" \
+            --templates-dir "$TEMPLATES_DIR"; then
+            log_success "Project generated from templates successfully"
+        else
+            log_error "Failed to generate project from templates"
+            exit 1
+        fi
     fi
     
     # Clean up temporary config file
