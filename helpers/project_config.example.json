@@ -1,0 +1,34 @@
+{
+  "project_name": "MyAwesomeProject",
+  "project_version": "1.0.0",
+  "project_description": "A modern C++20 application with advanced features",
+  "project_author": "Your Name",
+  "cpp_standard": "20",
+  "cmake_version": "3.20",
+  "enable_testing": true,
+  "enable_sanitizers": true,
+  "enable_warnings": true,
+  "use_vcpkg": true,
+  "optional_libraries": {
+    "fmt": true,
+    "spdlog": true,
+    "boost": false,
+    "openssl": false
+  },
+  "compiler_options": {
+    "enable_lto": true,
+    "enable_static_analysis": true,
+    "warning_level": "strict"
+  },
+  "build_configuration": {
+    "default_build_type": "Release",
+    "enable_debug_info": true,
+    "enable_profiling": false
+  },
+  "project_metadata": {
+    "license": "MIT",
+    "homepage": "https://github.com/username/project",
+    "repository": "https://github.com/username/project.git",
+    "bug_tracker": "https://github.com/username/project/issues"
+  }
+} 

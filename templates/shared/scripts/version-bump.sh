@@ -1,0 +1,835 @@
+#!/bin/bash
+
+# {{ project_name }} Version Bump Script
+# Bump version numbers and manage project versioning
+
+set -euo pipefail  # Exit on error, undefined vars, pipe failures
+
+# Script configuration
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Colors for output
+readonly RED='\033[0;31m'
+readonly GREEN='\033[0;32m'
+readonly YELLOW='\033[1;33m'
+readonly BLUE='\033[0;34m'
+readonly PURPLE='\033[0;35m'
+readonly CYAN='\033[0;36m'
+readonly BOLD='\033[1m'
+readonly NC='\033[0m' # No Color
+
+# Logging functions with emojis
+log_info() {
+    if [[ "${QUIET:-false}" != true ]]; then
+        echo -e "${BLUE}ℹ️  [INFO]${NC} $*"
+    fi
+}
+
+log_success() {
+    if [[ "${QUIET:-false}" != true ]]; then
+        echo -e "${GREEN}✅ [SUCCESS]${NC} $*"
+    fi
+}
+
+log_warning() {
+    if [[ "${QUIET:-false}" != true ]]; then
+        echo -e "${YELLOW}⚠️  [WARNING]${NC} $*"
+    fi
+}
+
+log_error() {
+    echo -e "${RED}❌ [ERROR]${NC} $*" >&2
+}
+
+log_debug() {
+    if [[ "${VERBOSE:-false}" == true ]]; then
+        echo -e "${PURPLE}🔍 [DEBUG]${NC} $*"
+    fi
+}
+
+log_version() {
+    if [[ "${QUIET:-false}" != true ]]; then
+        echo -e "${CYAN}🏷️  [VERSION]${NC} $*"
+    fi
+}
+
+# Parse semantic version
+parse_version() {
+    local version="$1"
+    local regex="^([0-9]+)\.([0-9]+)\.([0-9]+)(-([a-zA-Z0-9]+))?(\+([a-zA-Z0-9]+))?$"
+    
+    if [[ $version =~ $regex ]]; then
+        echo "${BASH_REMATCH[1]} ${BASH_REMATCH[2]} ${BASH_REMATCH[3]} ${BASH_REMATCH[5]:-} ${BASH_REMATCH[7]:-}"
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Get current version from various sources
+get_current_version() {
+    local version=""
+    
+    # Try CMakeLists.txt first
+    if [[ -f "$PROJECT_ROOT/CMakeLists.txt" ]]; then
+        version=$(grep -E "project\s*\(" "$PROJECT_ROOT/CMakeLists.txt" | grep -oE "VERSION\s+[0-9]+\.[0-9]+\.[0-9]+" | grep -oE "[0-9]+\.[0-9]+\.[0-9]+" || true)
+        if [[ -n "$version" ]]; then
+            log_debug "Found version in CMakeLists.txt: $version"
+            echo "$version"
+            return 0
+        fi
+    fi
+    
+    # Try vcpkg.json
+    if [[ -f "$PROJECT_ROOT/vcpkg.json" ]] && command -v jq >/dev/null 2>&1; then
+        version=$(jq -r '.version // empty' "$PROJECT_ROOT/vcpkg.json" 2>/dev/null || true)
+        if [[ -n "$version" ]] && [[ "$version" != "null" ]]; then
+            log_debug "Found version in vcpkg.json: $version"
+            echo "$version"
+            return 0
+        fi
+    fi
+    
+    # Try package.json
+    if [[ -f "$PROJECT_ROOT/package.json" ]] && command -v jq >/dev/null 2>&1; then
+        version=$(jq -r '.version // empty' "$PROJECT_ROOT/package.json" 2>/dev/null || true)
+        if [[ -n "$version" ]] && [[ "$version" != "null" ]]; then
+            log_debug "Found version in package.json: $version"
+            echo "$version"
+            return 0
+        fi
+    fi
+    
+    # Try git tags
+    if [[ -d "$PROJECT_ROOT/.git" ]]; then
+        version=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || true)
+        if [[ -n "$version" ]]; then
+            log_debug "Found version in git tags: $version"
+            echo "$version"
+            return 0
+        fi
+    fi
+    
+    # Default version
+    echo "0.1.0"
+    return 1
+}
+
+# Calculate new version
+calculate_new_version() {
+    local current_version="$1"
+    local bump_type="$2"
+    
+    local version_parts
+    if ! version_parts=($(parse_version "$current_version")); then
+        log_error "Invalid version format: $current_version"
+        return 1
+    fi
+    
+    local major="${version_parts[0]}"
+    local minor="${version_parts[1]}"
+    local patch="${version_parts[2]}"
+    local prerelease="${version_parts[3]:-}"
+    local build="${version_parts[4]:-}"
+    
+    case "$bump_type" in
+        major)
+            ((major++))
+            minor=0
+            patch=0
+            prerelease=""
+            build=""
+            ;;
+        minor)
+            ((minor++))
+            patch=0
+            prerelease=""
+            build=""
+            ;;
+        patch)
+            ((patch++))
+            prerelease=""
+            build=""
+            ;;
+        prerelease)
+            if [[ -n "$prerelease" ]]; then
+                if [[ "$prerelease" =~ ^([a-zA-Z]+)([0-9]+)$ ]]; then
+                    local pre_name="${BASH_REMATCH[1]}"
+                    local pre_num="${BASH_REMATCH[2]}"
+                    ((pre_num++))
+                    prerelease="$pre_name$pre_num"
+                else
+                    prerelease="$prerelease.1"
+                fi
+            else
+                prerelease="alpha1"
+            fi
+            ;;
+        release)
+            prerelease=""
+            build=""
+            ;;
+        *)
+            log_error "Unknown bump type: $bump_type"
+            return 1
+            ;;
+    esac
+    
+    local new_version="$major.$minor.$patch"
+    if [[ -n "$prerelease" ]]; then
+        new_version="$new_version-$prerelease"
+    fi
+    if [[ -n "$build" ]]; then
+        new_version="$new_version+$build"
+    fi
+    
+    echo "$new_version"
+}
+
+# Update CMakeLists.txt
+update_cmake_version() {
+    local new_version="$1"
+    local cmake_file="$PROJECT_ROOT/CMakeLists.txt"
+    
+    if [[ ! -f "$cmake_file" ]]; then
+        log_debug "CMakeLists.txt not found, skipping"
+        return 0
+    fi
+    
+    log_version "Updating CMakeLists.txt version to $new_version..."
+    
+    if [[ "$DRY_RUN" == true ]]; then
+        log_info "Would update CMakeLists.txt version to $new_version"
+        return 0
+    fi
+    
+    # Create backup
+    cp "$cmake_file" "$cmake_file.backup"
+    
+    # Update project() call with VERSION
+    if grep -q "project.*VERSION" "$cmake_file"; then
+        sed -i.tmp "s/\(project.*VERSION\s\+\)[0-9]\+\.[0-9]\+\.[0-9]\+/\1$new_version/" "$cmake_file"
+        rm -f "$cmake_file.tmp"
+    else
+        # Add VERSION to existing project() call
+        sed -i.tmp "s/\(project\s*(\s*[^)]*\))/\1 VERSION $new_version)/" "$cmake_file"
+        rm -f "$cmake_file.tmp"
+    fi
+    
+    # Update any explicit version variables
+    sed -i.tmp "s/\(set\s*(\s*VERSION\s\+\)[0-9]\+\.[0-9]\+\.[0-9]\+/\1$new_version/" "$cmake_file"
+    rm -f "$cmake_file.tmp"
+    
+    log_success "Updated CMakeLists.txt"
+}
+
+# Update vcpkg.json
+update_vcpkg_version() {
+    local new_version="$1"
+    local vcpkg_file="$PROJECT_ROOT/vcpkg.json"
+    
+    if [[ ! -f "$vcpkg_file" ]]; then
+        log_debug "vcpkg.json not found, skipping"
+        return 0
+    fi
+    
+    log_version "Updating vcpkg.json version to $new_version..."
+    
+    if [[ "$DRY_RUN" == true ]]; then
+        log_info "Would update vcpkg.json version to $new_version"
+        return 0
+    fi
+    
+    # Create backup
+    cp "$vcpkg_file" "$vcpkg_file.backup"
+    
+    if command -v jq >/dev/null 2>&1; then
+        # Use jq for precise JSON manipulation
+        jq --arg version "$new_version" '.version = $version' "$vcpkg_file" > "$vcpkg_file.tmp"
+        mv "$vcpkg_file.tmp" "$vcpkg_file"
+    else
+        # Fallback to sed
+        sed -i.tmp "s/\(\"version\"\s*:\s*\"\)[^\"]*\"/\1$new_version\"/" "$vcpkg_file"
+        rm -f "$vcpkg_file.tmp"
+    fi
+    
+    log_success "Updated vcpkg.json"
+}
+
+# Update package.json
+update_package_version() {
+    local new_version="$1"
+    local package_file="$PROJECT_ROOT/package.json"
+    
+    if [[ ! -f "$package_file" ]]; then
+        log_debug "package.json not found, skipping"
+        return 0
+    fi
+    
+    log_version "Updating package.json version to $new_version..."
+    
+    if [[ "$DRY_RUN" == true ]]; then
+        log_info "Would update package.json version to $new_version"
+        return 0
+    fi
+    
+    # Create backup
+    cp "$package_file" "$package_file.backup"
+    
+    if command -v jq >/dev/null 2>&1; then
+        # Use jq for precise JSON manipulation
+        jq --arg version "$new_version" '.version = $version' "$package_file" > "$package_file.tmp"
+        mv "$package_file.tmp" "$package_file"
+    else
+        # Fallback to sed
+        sed -i.tmp "s/\(\"version\"\s*:\s*\"\)[^\"]*\"/\1$new_version\"/" "$package_file"
+        rm -f "$package_file.tmp"
+    fi
+    
+    log_success "Updated package.json"
+}
+
+# Update other version files
+update_other_files() {
+    local new_version="$1"
+    
+    # Update VERSION file if it exists
+    if [[ -f "$PROJECT_ROOT/VERSION" ]]; then
+        log_version "Updating VERSION file..."
+        if [[ "$DRY_RUN" != true ]]; then
+            echo "$new_version" > "$PROJECT_ROOT/VERSION"
+            log_success "Updated VERSION file"
+        fi
+    fi
+    
+    # Update version.h or version.hpp if they exist
+    local version_headers=("$PROJECT_ROOT/include/version.h" "$PROJECT_ROOT/include/version.hpp" "$PROJECT_ROOT/src/version.h" "$PROJECT_ROOT/src/version.hpp")
+    
+    for header in "${version_headers[@]}"; do
+        if [[ -f "$header" ]]; then
+            log_version "Updating $header..."
+            if [[ "$DRY_RUN" != true ]]; then
+                cp "$header" "$header.backup"
+                
+                # Parse version components
+                local version_parts
+                version_parts=($(parse_version "$new_version"))
+                local major="${version_parts[0]}"
+                local minor="${version_parts[1]}"
+                local patch="${version_parts[2]}"
+                
+                # Update version macros
+                sed -i.tmp "s/\(#define\s\+VERSION_MAJOR\s\+\)[0-9]\+/\1$major/" "$header"
+                sed -i.tmp "s/\(#define\s\+VERSION_MINOR\s\+\)[0-9]\+/\1$minor/" "$header"
+                sed -i.tmp "s/\(#define\s\+VERSION_PATCH\s\+\)[0-9]\+/\1$patch/" "$header"
+                sed -i.tmp "s/\(#define\s\+VERSION_STRING\s\+\"\)[^\"]*\"/\1$new_version\"/" "$header"
+                rm -f "$header.tmp"
+                
+                log_success "Updated $(basename "$header")"
+            fi
+        fi
+    done
+}
+
+# Generate CHANGELOG entry
+generate_changelog_entry() {
+    local new_version="$1"
+    local previous_version="$2"
+    
+    if [[ "$SKIP_CHANGELOG" == true ]]; then
+        log_debug "Skipping CHANGELOG generation (--skip-changelog)"
+        return 0
+    fi
+    
+    local changelog_file="$PROJECT_ROOT/CHANGELOG.md"
+    
+    log_version "Generating CHANGELOG entry for $new_version..."
+    
+    if [[ "$DRY_RUN" == true ]]; then
+        log_info "Would generate CHANGELOG entry for $new_version"
+        return 0
+    fi
+    
+    # Create CHANGELOG.md if it doesn't exist
+    if [[ ! -f "$changelog_file" ]]; then
+        cat > "$changelog_file" << EOF
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+EOF
+    fi
+    
+    # Generate git log since last version
+    local git_log=""
+    if [[ -d "$PROJECT_ROOT/.git" ]] && [[ -n "$previous_version" ]]; then
+        local last_tag
+        last_tag=$(git tag -l "v$previous_version" | head -1)
+        if [[ -n "$last_tag" ]]; then
+            git_log=$(git log --oneline "$last_tag"..HEAD 2>/dev/null || true)
+        else
+            git_log=$(git log --oneline -10 2>/dev/null || true)
+        fi
+    fi
+    
+    # Create new changelog entry
+    local temp_file="/tmp/changelog_entry_$$"
+    {
+        echo "## [$new_version] - $(date +%Y-%m-%d)"
+        echo
+        
+        if [[ -n "$git_log" ]]; then
+            echo "### Added"
+            echo
+            echo "### Changed"
+            echo
+            while IFS= read -r line; do
+                if [[ -n "$line" ]]; then
+                    echo "- $line"
+                fi
+            done <<< "$git_log"
+            echo
+            echo "### Deprecated"
+            echo
+            echo "### Removed"
+            echo
+            echo "### Fixed"
+            echo
+            echo "### Security"
+            echo
+        else
+            echo "### Changed"
+            echo
+            echo "- Version bump to $new_version"
+            echo
+        fi
+    } > "$temp_file"
+    
+    # Insert new entry at the top of CHANGELOG.md
+    if grep -q "^# Changelog" "$changelog_file"; then
+        # Find the line after the header and insert new entry
+        sed -i.tmp "/^# Changelog/r $temp_file" "$changelog_file"
+        rm -f "$changelog_file.tmp"
+    else
+        # Prepend to existing file
+        cat "$temp_file" "$changelog_file" > "$changelog_file.tmp"
+        mv "$changelog_file.tmp" "$changelog_file"
+    fi
+    
+    rm -f "$temp_file"
+    
+    log_success "Updated CHANGELOG.md"
+}
+
+# Create git tag
+create_git_tag() {
+    local new_version="$1"
+    
+    if [[ "$SKIP_GIT_TAG" == true ]]; then
+        log_debug "Skipping git tag creation (--skip-git-tag)"
+        return 0
+    fi
+    
+    if [[ ! -d "$PROJECT_ROOT/.git" ]]; then
+        log_warning "Not a git repository, skipping tag creation"
+        return 0
+    fi
+    
+    local tag_name="v$new_version"
+    
+    log_version "Creating git tag $tag_name..."
+    
+    if [[ "$DRY_RUN" == true ]]; then
+        log_info "Would create git tag $tag_name"
+        return 0
+    fi
+    
+    cd "$PROJECT_ROOT"
+    
+    # Check if tag already exists
+    if git tag -l "$tag_name" | grep -q "^$tag_name$"; then
+        log_warning "Tag $tag_name already exists"
+        return 1
+    fi
+    
+    # Create annotated tag
+    if git tag -a "$tag_name" -m "Release $new_version"; then
+        log_success "Created git tag $tag_name"
+        
+        if [[ "$PUSH_TAG" == true ]]; then
+            log_info "Pushing tag to remote..."
+            if git push origin "$tag_name"; then
+                log_success "Pushed tag to remote"
+            else
+                log_warning "Failed to push tag to remote"
+            fi
+        fi
+    else
+        log_error "Failed to create git tag $tag_name"
+        return 1
+    fi
+}
+
+# Commit changes
+commit_changes() {
+    local new_version="$1"
+    
+    if [[ "$SKIP_COMMIT" == true ]]; then
+        log_debug "Skipping git commit (--skip-commit)"
+        return 0
+    fi
+    
+    if [[ ! -d "$PROJECT_ROOT/.git" ]]; then
+        log_warning "Not a git repository, skipping commit"
+        return 0
+    fi
+    
+    log_version "Committing version changes..."
+    
+    if [[ "$DRY_RUN" == true ]]; then
+        log_info "Would commit version changes"
+        return 0
+    fi
+    
+    cd "$PROJECT_ROOT"
+    
+    # Add modified files
+    local files_to_add=()
+    
+    if [[ -f "CMakeLists.txt" ]]; then
+        files_to_add+=("CMakeLists.txt")
+    fi
+    if [[ -f "vcpkg.json" ]]; then
+        files_to_add+=("vcpkg.json")
+    fi
+    if [[ -f "package.json" ]]; then
+        files_to_add+=("package.json")
+    fi
+    if [[ -f "VERSION" ]]; then
+        files_to_add+=("VERSION")
+    fi
+    if [[ -f "CHANGELOG.md" ]]; then
+        files_to_add+=("CHANGELOG.md")
+    fi
+    
+    # Add version headers
+    for header in include/version.h include/version.hpp src/version.h src/version.hpp; do
+        if [[ -f "$header" ]]; then
+            files_to_add+=("$header")
+        fi
+    done
+    
+    if [[ ${#files_to_add[@]} -gt 0 ]]; then
+        git add "${files_to_add[@]}"
+        
+        local commit_message="chore: bump version to $new_version"
+        if git commit -m "$commit_message"; then
+            log_success "Committed version changes"
+        else
+            log_warning "Failed to commit changes (maybe no changes to commit)"
+        fi
+    else
+        log_warning "No files to commit"
+    fi
+}
+
+# Show current status
+show_status() {
+    if [[ "$QUIET" == true ]]; then
+        return
+    fi
+    
+    local current_version
+    current_version=$(get_current_version)
+    
+    log_info "Version Bump Status:"
+    echo "  Project: {{ project_name }}"
+    echo "  Current Version: $current_version"
+    echo "  Bump Type: $BUMP_TYPE"
+    
+    if [[ -n "$CUSTOM_VERSION" ]]; then
+        echo "  Target Version: $CUSTOM_VERSION"
+    else
+        local new_version
+        new_version=$(calculate_new_version "$current_version" "$BUMP_TYPE")
+        echo "  New Version: $new_version"
+    fi
+    
+    echo "  Mode: $([ "$DRY_RUN" == true ] && echo "Dry Run" || echo "Execute")"
+    echo "  Skip CHANGELOG: $([ "$SKIP_CHANGELOG" == true ] && echo "Yes" || echo "No")"
+    echo "  Skip Git Tag: $([ "$SKIP_GIT_TAG" == true ] && echo "Yes" || echo "No")"
+    echo "  Skip Git Commit: $([ "$SKIP_COMMIT" == true ] && echo "Yes" || echo "No")"
+    echo "  Push Tag: $([ "$PUSH_TAG" == true ] && echo "Yes" || echo "No")"
+}
+
+# Print usage information
+print_usage() {
+    cat << EOF
+${BOLD}{{ project_name }} Version Bump Script${NC}
+Bump version numbers and manage project versioning
+
+${BOLD}USAGE:${NC}
+    $0 [BUMP_TYPE] [OPTIONS]
+
+${BOLD}BUMP TYPES:${NC}
+    major                   Increment major version (1.0.0 -> 2.0.0)
+    minor                   Increment minor version (1.0.0 -> 1.1.0) [default]
+    patch                   Increment patch version (1.0.0 -> 1.0.1)
+    prerelease              Increment prerelease version (1.0.0 -> 1.0.0-alpha1)
+    release                 Remove prerelease suffix (1.0.0-alpha1 -> 1.0.0)
+
+${BOLD}VERSION OPTIONS:${NC}
+    --version VERSION       Set specific version instead of bumping
+    --current               Show current version and exit
+
+${BOLD}UPDATE OPTIONS:${NC}
+    --skip-cmake            Don't update CMakeLists.txt
+    --skip-vcpkg            Don't update vcpkg.json
+    --skip-package          Don't update package.json
+    --skip-headers          Don't update version headers
+    --skip-changelog        Don't update CHANGELOG.md
+    --skip-commit           Don't commit changes to git
+    --skip-git-tag          Don't create git tag
+    --push-tag              Push git tag to remote after creation
+
+${BOLD}BEHAVIOR OPTIONS:${NC}
+    -n, --dry-run           Show what would be done without executing
+    -v, --verbose           Enable verbose output with detailed information
+    -q, --quiet             Suppress non-essential output
+    --color                 Force colored output
+    --no-color              Disable colored output
+
+${BOLD}UTILITY OPTIONS:${NC}
+    -h, --help              Show this help message
+
+${BOLD}EXAMPLES:${NC}
+    $0                              # Bump minor version
+    $0 major                        # Bump major version
+    $0 patch                        # Bump patch version
+    $0 --version 2.0.0              # Set specific version
+    $0 --current                    # Show current version
+    $0 minor --push-tag             # Bump minor and push tag
+    $0 --dry-run --verbose          # Preview changes
+    $0 patch --skip-changelog       # Bump patch without CHANGELOG
+
+${BOLD}FILES UPDATED:${NC}
+    CMakeLists.txt          project(NAME VERSION x.y.z)
+    vcpkg.json              "version": "x.y.z"
+    package.json            "version": "x.y.z"
+    VERSION                 x.y.z
+    include/version.h       VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH
+    CHANGELOG.md            New entry with date and changes
+
+${BOLD}GIT INTEGRATION:${NC}
+    - Commits all version changes with descriptive message
+    - Creates annotated git tag (vx.y.z)
+    - Optionally pushes tag to remote repository
+    - Generates CHANGELOG entries from git history
+
+${BOLD}NOTES:${NC}
+    - Uses semantic versioning (MAJOR.MINOR.PATCH)
+    - Automatically detects current version from various sources
+    - Creates backups of modified files (.backup extension)
+    - Supports prerelease versions (alpha, beta, rc)
+
+EOF
+}
+
+# Default values
+BUMP_TYPE="minor"
+CUSTOM_VERSION=""
+SHOW_CURRENT=false
+SKIP_CMAKE=false
+SKIP_VCPKG=false
+SKIP_PACKAGE=false
+SKIP_HEADERS=false
+SKIP_CHANGELOG=false
+SKIP_COMMIT=false
+SKIP_GIT_TAG=false
+PUSH_TAG=false
+DRY_RUN=false
+VERBOSE=false
+QUIET=false
+FORCE_COLOR=""
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        major|minor|patch|prerelease|release)
+            BUMP_TYPE="$1"
+            shift
+            ;;
+        --version)
+            CUSTOM_VERSION="$2"
+            shift 2
+            ;;
+        --current)
+            SHOW_CURRENT=true
+            shift
+            ;;
+        --skip-cmake)
+            SKIP_CMAKE=true
+            shift
+            ;;
+        --skip-vcpkg)
+            SKIP_VCPKG=true
+            shift
+            ;;
+        --skip-package)
+            SKIP_PACKAGE=true
+            shift
+            ;;
+        --skip-headers)
+            SKIP_HEADERS=true
+            shift
+            ;;
+        --skip-changelog)
+            SKIP_CHANGELOG=true
+            shift
+            ;;
+        --skip-commit)
+            SKIP_COMMIT=true
+            shift
+            ;;
+        --skip-git-tag)
+            SKIP_GIT_TAG=true
+            shift
+            ;;
+        --push-tag)
+            PUSH_TAG=true
+            shift
+            ;;
+        -n|--dry-run)
+            DRY_RUN=true
+            shift
+            ;;
+        -v|--verbose)
+            VERBOSE=true
+            shift
+            ;;
+        -q|--quiet)
+            QUIET=true
+            shift
+            ;;
+        --color)
+            FORCE_COLOR=true
+            shift
+            ;;
+        --no-color)
+            FORCE_COLOR=false
+            shift
+            ;;
+        -h|--help)
+            print_usage
+            exit 0
+            ;;
+        *)
+            log_error "Unknown option: $1"
+            print_usage
+            exit 1
+            ;;
+    esac
+done
+
+# Handle color output
+if [[ "$FORCE_COLOR" == false ]] || [[ ! -t 1 ]] || [[ "$QUIET" == true ]]; then
+    RED="" GREEN="" YELLOW="" BLUE="" PURPLE="" CYAN="" BOLD="" NC=""
+fi
+
+# Main execution
+main() {
+    cd "$PROJECT_ROOT"
+    
+    # Show current version if requested
+    if [[ "$SHOW_CURRENT" == true ]]; then
+        local current_version
+        current_version=$(get_current_version)
+        echo "$current_version"
+        exit 0
+    fi
+    
+    # Print header
+    if [[ "$QUIET" != true ]]; then
+        log_info "Starting {{ project_name }} version bump..."
+        echo
+    fi
+    
+    show_status
+    
+    if [[ "$QUIET" != true ]]; then
+        echo
+    fi
+    
+    # Get current and new versions
+    local current_version
+    current_version=$(get_current_version)
+    
+    local new_version
+    if [[ -n "$CUSTOM_VERSION" ]]; then
+        new_version="$CUSTOM_VERSION"
+        if ! parse_version "$new_version" >/dev/null; then
+            log_error "Invalid version format: $new_version"
+            exit 1
+        fi
+    else
+        if ! new_version=$(calculate_new_version "$current_version" "$BUMP_TYPE"); then
+            exit 1
+        fi
+    fi
+    
+    log_version "Bumping version from $current_version to $new_version"
+    
+    # Update version files
+    if [[ "$SKIP_CMAKE" != true ]]; then
+        update_cmake_version "$new_version"
+    fi
+    
+    if [[ "$SKIP_VCPKG" != true ]]; then
+        update_vcpkg_version "$new_version"
+    fi
+    
+    if [[ "$SKIP_PACKAGE" != true ]]; then
+        update_package_version "$new_version"
+    fi
+    
+    if [[ "$SKIP_HEADERS" != true ]]; then
+        update_other_files "$new_version"
+    fi
+    
+    # Generate CHANGELOG
+    if [[ "$SKIP_CHANGELOG" != true ]]; then
+        generate_changelog_entry "$new_version" "$current_version"
+    fi
+    
+    # Git operations
+    if [[ "$SKIP_COMMIT" != true ]]; then
+        commit_changes "$new_version"
+    fi
+    
+    if [[ "$SKIP_GIT_TAG" != true ]]; then
+        create_git_tag "$new_version"
+    fi
+    
+    # Final summary
+    if [[ "$QUIET" != true ]]; then
+        echo
+        if [[ "$DRY_RUN" == true ]]; then
+            log_success "Dry run completed - no versions were actually changed"
+        else
+            log_success "{{ project_name }} version bumped to $new_version!"
+            
+            if [[ "$PUSH_TAG" == true ]] && [[ "$SKIP_GIT_TAG" != true ]]; then
+                log_info "Git tag v$new_version has been pushed to remote"
+            elif [[ "$SKIP_GIT_TAG" != true ]]; then
+                log_info "Git tag v$new_version created (use --push-tag to push to remote)"
+            fi
+        fi
+    fi
+}
+
+# Run main function
+main "$@" 

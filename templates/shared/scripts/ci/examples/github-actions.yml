@@ -1,0 +1,220 @@
+# {{ project_name }} GitHub Actions CI/CD Pipeline
+# This workflow demonstrates how to use the CI scripts
+
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  release:
+    types: [ published ]
+
+env:
+  BUILD_TYPE: Release
+  VCPKG_BINARY_SOURCES: clear;x-gha,readwrite
+
+jobs:
+  # Pre-merge validation
+  validate:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ninja-build clang-tidy clang-format
+    
+    - name: Run validation
+      run: |
+        chmod +x scripts/ci/ci-validate.sh
+        ./scripts/ci/ci-validate.sh
+    
+    - name: Upload validation reports
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: validation-reports
+        path: build/validation-reports/
+
+  # Main build and test
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        build_type: [Debug, Release]
+        exclude:
+          # Skip Debug builds on Windows to reduce CI time
+          - os: windows-latest
+            build_type: Debug
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up vcpkg
+      uses: lukka/run-vcpkg@v11
+      with:
+        vcpkgGitCommitId: 'latest'
+    
+    - name: Install system dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ninja-build clang-tidy gcovr
+    
+    - name: Install system dependencies (macOS)
+      if: matrix.os == 'macos-latest'
+      run: |
+        brew install ninja llvm gcovr
+        echo "/opt/homebrew/opt/llvm/bin" >> $GITHUB_PATH
+    
+    - name: Install system dependencies (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        choco install ninja
+    
+    - name: Configure environment
+      shell: bash
+      run: |
+        echo "PARALLEL_JOBS=${{ runner.os == 'macOS' && '3' || '4' }}" >> $GITHUB_ENV
+        echo "BUILD_TYPE=${{ matrix.build_type }}" >> $GITHUB_ENV
+        if [ "${{ matrix.build_type }}" = "Debug" ]; then
+          echo "ENABLE_COVERAGE=true" >> $GITHUB_ENV
+        fi
+    
+    - name: Run CI build
+      shell: bash
+      run: |
+        chmod +x scripts/ci/ci-build.sh
+        ./scripts/ci/ci-build.sh \
+          --build-type ${{ matrix.build_type }} \
+          --enable-tests \
+          $([ "${{ matrix.build_type }}" = "Debug" ] && echo "--enable-coverage") \
+          --generate-reports
+    
+    - name: Upload build reports
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: build-reports-${{ matrix.os }}-${{ matrix.build_type }}
+        path: build/ci-reports/
+    
+    - name: Upload coverage to Codecov
+      if: matrix.build_type == 'Debug' && matrix.os == 'ubuntu-latest'
+      uses: codecov/codecov-action@v3
+      with:
+        file: build/ci-reports/coverage.xml
+        fail_ci_if_error: false
+
+  # Documentation generation
+  docs:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install documentation tools
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y doxygen graphviz
+    
+    - name: Generate documentation
+      run: |
+        chmod +x scripts/ci/ci-docs.sh
+        ./scripts/ci/ci-docs.sh
+    
+    - name: Deploy to GitHub Pages
+      uses: peaceiris/actions-gh-pages@v3
+      if: github.ref == 'refs/heads/main'
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./build/docs
+
+  # Package creation and release
+  package:
+    runs-on: ${{ matrix.os }}
+    needs: build
+    if: github.event_name == 'release'
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up vcpkg
+      uses: lukka/run-vcpkg@v11
+      with:
+        vcpkgGitCommitId: 'latest'
+    
+    - name: Install system dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ninja-build dpkg-dev rpm
+    
+    - name: Install system dependencies (macOS)
+      if: matrix.os == 'macos-latest'
+      run: |
+        brew install ninja
+    
+    - name: Install system dependencies (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        choco install ninja 7zip
+    
+    - name: Build for packaging
+      shell: bash
+      run: |
+        chmod +x scripts/ci/ci-build.sh
+        ./scripts/ci/ci-build.sh \
+          --build-type Release \
+          --enable-install \
+          --disable-tests
+    
+    - name: Create packages
+      shell: bash
+      run: |
+        chmod +x scripts/ci/ci-package.sh
+        ./scripts/ci/ci-package.sh \
+          $([ "${{ matrix.os }}" = "ubuntu-latest" ] && echo "--create-deb") \
+          --create-zip \
+          --create-source
+    
+    - name: Upload packages
+      uses: actions/upload-artifact@v4
+      with:
+        name: packages-${{ matrix.os }}
+        path: build/packages/
+    
+    - name: Upload to release
+      uses: softprops/action-gh-release@v1
+      if: github.event_name == 'release'
+      with:
+        files: build/packages/*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Security scanning
+  security:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Run security validation
+      run: |
+        chmod +x scripts/ci/ci-validate.sh
+        ./scripts/ci/ci-validate.sh --check-security --no-build --no-tests
+    
+    - name: Run CodeQL Analysis
+      uses: github/codeql-action/analyze@v2
+      with:
+        languages: cpp

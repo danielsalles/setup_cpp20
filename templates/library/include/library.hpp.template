@@ -1,0 +1,269 @@
+#pragma once
+
+/**
+ * @file {{ project_name | lower }}.hpp
+ * @brief {{ project_description | default("A modern C++20 library") }}
+ * @author {{ project_author | default("Developer") }}
+ * @version {{ project_version | default("1.0.0") }}
+ */
+
+#include <concepts>
+#include <string>
+#include <string_view>
+#include <vector>
+#include <memory>
+#include <optional>
+#include <expected>
+#include <ranges>
+#include <functional>
+#include <span>
+
+#ifdef HAS_FMT
+#include <fmt/format.h>
+#include <fmt/ranges.h>
+#endif
+
+namespace {{ project_name | lower }} {
+
+/**
+ * @brief Library version information
+ */
+struct Version {
+    static constexpr std::string_view major = "{{ project_version.split('.')[0] | default('1') }}";
+    static constexpr std::string_view minor = "{{ project_version.split('.')[1] | default('0') }}";
+    static constexpr std::string_view patch = "{{ project_version.split('.')[2] | default('0') }}";
+    static constexpr std::string_view full = "{{ project_version | default('1.0.0') }}";
+    
+    static std::string to_string() {
+#ifdef HAS_FMT
+        return fmt::format("{}.{}.{}", major, minor, patch);
+#else
+        return std::string{major} + "." + std::string{minor} + "." + std::string{patch};
+#endif
+    }
+};
+
+/**
+ * @brief C++20 concept: Formattable
+ * Ensures a type can be converted to a string via std::to_string or a .to_string() method.
+ * Concepts improve template error messages and enforce type constraints at compile time.
+ */
+template<typename T>
+concept Formattable = requires(const T& t) {
+    std::to_string(t);
+} || requires(const T& t) {
+    { t.to_string() } -> std::convertible_to<std::string>;
+};
+
+/**
+ * @brief C++20 concept: Numeric
+ * Constrains a type to be either an integral or a floating-point type.
+ * Useful for generic programming with arithmetic types.
+ */
+template<typename T>
+concept Numeric = std::integral<T> || std::floating_point<T>;
+
+/**
+ * @brief Error type for operations that can fail
+ */
+enum class Error {
+    None = 0,
+    InvalidInput,
+    OutOfRange,
+    NotFound,
+    InternalError
+};
+
+/**
+ * @brief Result type using C++23 std::expected for robust error handling.
+ * Represents a value that may be present or an error explaining why it's not.
+ * Note: std::expected is officially C++23. This template uses it for modern error handling demonstration.
+ */
+template<typename T>
+using Result = std::expected<T, Error>;
+
+/**
+ * @brief Modern C++20 class template example using concepts and noexcept.
+ */
+template<typename T>
+requires Numeric<T>
+class Calculator {
+public:
+    explicit Calculator(T initial_value = T{}) : value_(initial_value) {}
+    
+    // Copy constructor and assignment
+    Calculator(const Calculator&) = default;
+    Calculator& operator=(const Calculator&) = default;
+    
+    // Move constructor and assignment
+    Calculator(Calculator&&) noexcept = default;
+    Calculator& operator=(Calculator&&) noexcept = default;
+    
+    // Destructor
+    ~Calculator() = default;
+    
+    /**
+     * @brief Add a value
+     */
+    constexpr Calculator& add(T value) noexcept {
+        value_ += value;
+        return *this;
+    }
+    
+    /**
+     * @brief Subtract a value
+     */
+    constexpr Calculator& subtract(T value) noexcept {
+        value_ -= value;
+        return *this;
+    }
+    
+    /**
+     * @brief Multiply by a value
+     */
+    constexpr Calculator& multiply(T value) noexcept {
+        value_ *= value;
+        return *this;
+    }
+    
+    /**
+     * @brief Divide by a value (returns Result for error handling)
+     */
+    constexpr Result<Calculator&> divide(T value) noexcept {
+        if (value == T{}) {
+            return std::unexpected(Error::InvalidInput);
+        }
+        value_ /= value;
+        return *this;
+    }
+    
+    /**
+     * @brief Get the current value
+     */
+    [[nodiscard]] constexpr T value() const noexcept {
+        return value_;
+    }
+    
+    /**
+     * @brief Reset to zero
+     */
+    constexpr void reset() noexcept {
+        value_ = T{};
+    }
+    
+    /**
+     * @brief Format the current value as string
+     */
+    [[nodiscard]] std::string to_string() const {
+#ifdef HAS_FMT
+        return fmt::format("{}", value_);
+#else
+        return std::to_string(value_);
+#endif
+    }
+
+private:
+    T value_;
+};
+
+/**
+ * @brief Utility function to create a calculator with deduced type
+ */
+template<Numeric T>
+[[nodiscard]] constexpr auto make_calculator(T initial_value = T{}) {
+    return Calculator<T>{initial_value};
+}
+
+/**
+ * @brief Process a range of numeric values with a function using C++20 Ranges.
+ * Ranges allow for composable and lazy evaluation of algorithms on sequences.
+ */
+template<std::ranges::input_range Range, typename Func>
+requires Numeric<std::ranges::range_value_t<Range>> && 
+         std::invocable<Func, std::ranges::range_value_t<Range>>
+[[nodiscard]] auto process_range(Range&& range, Func&& func) {
+    using ValueType = std::ranges::range_value_t<Range>;
+    std::vector<std::invoke_result_t<Func, ValueType>> result;
+    
+    for (auto&& value : range) {
+        result.emplace_back(std::invoke(func, value));
+    }
+    
+    return result;
+}
+
+/**
+ * @brief Filter and transform a range in one operation using C++20 Ranges pipeline.
+ * Demonstrates the power of composing views for efficient data manipulation.
+ */
+template<std::ranges::input_range Range, typename Predicate, typename Transform>
+requires std::predicate<Predicate, std::ranges::range_value_t<Range>> &&
+         std::invocable<Transform, std::ranges::range_value_t<Range>>
+[[nodiscard]] auto filter_transform(Range&& range, Predicate&& pred, Transform&& trans) {
+    auto view = range 
+        | std::views::filter(std::forward<Predicate>(pred))
+        | std::views::transform(std::forward<Transform>(trans));
+    
+    using ResultType = std::invoke_result_t<Transform, std::ranges::range_value_t<Range>>;
+    return std::vector<ResultType>(view.begin(), view.end());
+}
+
+/**
+ * @brief Configuration structure using designated initializers
+ */
+struct Config {
+    std::string name = "{{ project_name }}";
+    std::string version = "{{ project_version | default('1.0.0') }}";
+    bool debug_mode = false;
+    std::optional<std::string> log_file = std::nullopt;
+    int max_threads = 1;
+};
+
+/**
+ * @brief Create default configuration
+ */
+[[nodiscard]] inline Config default_config() {
+    return Config{
+        .name = "{{ project_name }}",
+        .version = "{{ project_version | default('1.0.0') }}",
+        .debug_mode = false,
+        .log_file = std::nullopt,
+        .max_threads = std::thread::hardware_concurrency()
+    };
+}
+
+/**
+ * @brief Get library information
+ */
+[[nodiscard]] inline std::string get_info() {
+#ifdef HAS_FMT
+    return fmt::format("{{ project_name }} v{} - {{ project_description | default('A modern C++20 library') }}", 
+                      Version::full);
+#else
+    return std::string{"{{ project_name }} v"} + std::string{Version::full} + 
+           " - {{ project_description | default('A modern C++20 library') }}";
+#endif
+}
+
+struct Statistics {
+    using ValueType = std::ranges::range_value_t<Range>;
+    
+    ValueType min;
+    ValueType max;
+    ValueType sum;
+    double average;
+    size_t count;
+    
+    static Result<Statistics> calculate(Range&& range);
+    
+    std::string to_string() const;
+};
+
+/**
+ * @brief Example function using C++20 std::span.
+ * std::span provides a non-owning, bounds-safe view over a contiguous sequence of objects,
+ * such as an array or a std::vector. It avoids copying and simplifies passing sequence data.
+ */
+long long sum_span_elements(std::span<const int> data_span);
+
+} // namespace {{ project_name | lower }} 

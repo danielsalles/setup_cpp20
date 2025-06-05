@@ -1,0 +1,863 @@
+#!/bin/bash
+
+# {{ project_name }} Static Analysis Script
+# Run clang-tidy static analysis on the codebase
+
+set -euo pipefail  # Exit on error, undefined vars, pipe failures
+
+# Script configuration
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+readonly BUILD_DIR="${PROJECT_ROOT}/build"
+readonly ANALYSIS_DIR="${BUILD_DIR}/analysis"
+
+# Colors for output (will be reset if no color mode)
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m' # No Color
+
+# Platform detection
+readonly OS_TYPE="$(uname -s)"
+
+# Logging functions with emojis
+log_info() {
+    if [[ "${QUIET:-false}" != true ]]; then
+        echo -e "${BLUE}ℹ️  [INFO]${NC} $*"
+    fi
+}
+
+log_success() {
+    if [[ "${QUIET:-false}" != true ]]; then
+        echo -e "${GREEN}✅ [SUCCESS]${NC} $*"
+    fi
+}
+
+log_warning() {
+    if [[ "${QUIET:-false}" != true ]]; then
+        echo -e "${YELLOW}⚠️  [WARNING]${NC} $*"
+    fi
+}
+
+log_error() {
+    echo -e "${RED}❌ [ERROR]${NC} $*" >&2
+}
+
+log_debug() {
+    if [[ "${VERBOSE:-false}" == true ]]; then
+        echo -e "${PURPLE}🔍 [DEBUG]${NC} $*"
+    fi
+}
+
+log_analyze() {
+    if [[ "${QUIET:-false}" != true ]]; then
+        echo -e "${CYAN}🔬 [ANALYZE]${NC} $*"
+    fi
+}
+
+# Check if clang-tidy is available
+check_clang_tidy() {
+    local clang_tidy_cmd=""
+    
+    # Try different clang-tidy variants
+    local candidates=("clang-tidy" "clang-tidy-17" "clang-tidy-16" "clang-tidy-15" "clang-tidy-14")
+    
+    for candidate in "${candidates[@]}"; do
+        if command -v "$candidate" >/dev/null 2>&1; then
+            clang_tidy_cmd="$candidate"
+            break
+        fi
+    done
+    
+    if [[ -z "$clang_tidy_cmd" ]]; then
+        log_error "clang-tidy not found. Please install clang-tidy."
+        log_info "On macOS: brew install llvm"
+        log_info "On Ubuntu/Debian: apt-get install clang-tidy"
+        log_info "On Fedora/RHEL: dnf install clang-tools-extra"
+        return 1
+    fi
+    
+    log_debug "Found clang-tidy: $clang_tidy_cmd"
+    echo "$clang_tidy_cmd"
+}
+
+# Find compilation database
+find_compile_commands() {
+    local compile_commands_paths=(
+        "$BUILD_DIR/compile_commands.json"
+        "$PROJECT_ROOT/compile_commands.json"
+        "$BUILD_DIR/Release/compile_commands.json"
+        "$BUILD_DIR/Debug/compile_commands.json"
+    )
+    
+    for path in "${compile_commands_paths[@]}"; do
+        if [[ -f "$path" ]]; then
+            log_debug "Found compile_commands.json: $path"
+            echo "$path"
+            return 0
+        fi
+    done
+    
+    return 1
+}
+
+# Generate compilation database if needed
+ensure_compile_commands() {
+    local compile_commands=""
+    
+    if ! compile_commands=$(find_compile_commands); then
+        log_info "No compile_commands.json found, generating..."
+        
+        # Create build directory if it doesn't exist
+        mkdir -p "$BUILD_DIR"
+        cd "$BUILD_DIR"
+        
+        # Prepare CMake arguments
+        local cmake_args=(
+            -G "${GENERATOR:-Ninja}"
+            -DCMAKE_BUILD_TYPE="${BUILD_TYPE:-Debug}"
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+        )
+        
+        # Add vcpkg toolchain if available
+        if [[ -n "${VCPKG_ROOT:-}" ]] && [[ -f "$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" ]]; then
+            cmake_args+=(-DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake")
+        elif [[ -d "$HOME/.vcpkg" ]] && [[ -f "$HOME/.vcpkg/scripts/buildsystems/vcpkg.cmake" ]]; then
+            cmake_args+=(-DCMAKE_TOOLCHAIN_FILE="$HOME/.vcpkg/scripts/buildsystems/vcpkg.cmake")
+        fi
+        
+        # Add custom cmake args if provided
+        if [[ -n "$CUSTOM_CMAKE_ARGS" ]]; then
+            eval "cmake_args+=($CUSTOM_CMAKE_ARGS)"
+        fi
+        
+        if [[ "$DRY_RUN" == true ]]; then
+            log_info "Would configure with: cmake ${cmake_args[*]} $PROJECT_ROOT"
+            echo "$BUILD_DIR/compile_commands.json"
+            return 0
+        fi
+        
+        # Configure to generate compile_commands.json
+        log_debug "Configuring: cmake ${cmake_args[*]} $PROJECT_ROOT"
+        if ! cmake "${cmake_args[@]}" "$PROJECT_ROOT"; then
+            log_error "Failed to configure project for analysis"
+            return 1
+        fi
+        
+        compile_commands="$BUILD_DIR/compile_commands.json"
+        if [[ ! -f "$compile_commands" ]]; then
+            log_error "compile_commands.json was not generated"
+            return 1
+        fi
+    fi
+    
+    echo "$compile_commands"
+}
+
+# Find source files to analyze
+find_source_files() {
+    local source_patterns=("*.cpp" "*.cxx" "*.cc" "*.c++")
+    local source_files=()
+    
+    # Look in common source directories
+    local search_dirs=("$PROJECT_ROOT/src" "$PROJECT_ROOT/lib" "$PROJECT_ROOT/source" "$PROJECT_ROOT")
+    
+    # If specific files/directories provided, use those
+    if [[ ${#ANALYZE_PATHS[@]} -gt 0 ]]; then
+        for path in "${ANALYZE_PATHS[@]}"; do
+            if [[ -f "$path" ]]; then
+                # It's a file
+                source_files+=("$path")
+            elif [[ -d "$path" ]]; then
+                # It's a directory, find source files in it
+                for pattern in "${source_patterns[@]}"; do
+                    while IFS= read -r -d '' file; do
+                        source_files+=("$file")
+                    done < <(find "$path" -name "$pattern" -type f -print0 2>/dev/null || true)
+                done
+            else
+                log_warning "Path not found: $path"
+            fi
+        done
+    else
+        # Find all source files in project
+        for dir in "${search_dirs[@]}"; do
+            if [[ -d "$dir" ]]; then
+                for pattern in "${source_patterns[@]}"; do
+                    while IFS= read -r -d '' file; do
+                        # Skip build directories and other common ignore patterns
+                        if [[ "$file" =~ /build/ ]] || [[ "$file" =~ /\.git/ ]] || [[ "$file" =~ /vendor/ ]] || [[ "$file" =~ /third_party/ ]]; then
+                            continue
+                        fi
+                        source_files+=("$file")
+                    done < <(find "$dir" -name "$pattern" -type f -print0 2>/dev/null || true)
+                done
+            fi
+        done
+    fi
+    
+    if [[ ${#source_files[@]} -eq 0 ]]; then
+        log_error "No source files found for analysis"
+        return 1
+    fi
+    
+    log_debug "Found ${#source_files[@]} source files for analysis"
+    printf '%s\n' "${source_files[@]}"
+}
+
+# Create .clang-tidy configuration if it doesn't exist
+ensure_clang_tidy_config() {
+    local config_file="$PROJECT_ROOT/.clang-tidy"
+    
+    if [[ ! -f "$config_file" ]] && [[ "$CREATE_CONFIG" == true ]]; then
+        log_info "Creating default .clang-tidy configuration..."
+        
+        if [[ "$DRY_RUN" == true ]]; then
+            log_info "Would create .clang-tidy configuration file"
+            return 0
+        fi
+        
+        cat > "$config_file" << 'EOF'
+---
+# clang-tidy configuration for {{ project_name }}
+# This file configures the static analysis checks to run
+
+Checks: >
+  -*,
+  bugprone-*,
+  cert-*,
+  clang-analyzer-*,
+  cppcoreguidelines-*,
+  google-*,
+  hicpp-*,
+  misc-*,
+  modernize-*,
+  performance-*,
+  portability-*,
+  readability-*,
+  -readability-magic-numbers,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -modernize-use-trailing-return-type,
+  -google-readability-todo,
+  -readability-braces-around-statements,
+  -hicpp-braces-around-statements,
+  -google-readability-braces-around-statements
+
+CheckOptions:
+  - key: readability-identifier-naming.NamespaceCase
+    value: lower_case
+  - key: readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key: readability-identifier-naming.StructCase
+    value: CamelCase
+  - key: readability-identifier-naming.FunctionCase
+    value: camelBack
+  - key: readability-identifier-naming.VariableCase
+    value: camelBack
+  - key: readability-identifier-naming.ParameterCase
+    value: camelBack
+  - key: readability-identifier-naming.EnumCase
+    value: CamelCase
+  - key: readability-identifier-naming.EnumConstantCase
+    value: UPPER_CASE
+  - key: readability-identifier-naming.ConstantCase
+    value: UPPER_CASE
+  - key: readability-identifier-naming.GlobalConstantCase
+    value: UPPER_CASE
+  - key: readability-identifier-naming.MemberCase
+    value: camelBack
+  - key: readability-identifier-naming.PrivateMemberSuffix
+    value: _
+  - key: readability-identifier-naming.ProtectedMemberSuffix
+    value: _
+  - key: modernize-loop-convert.MaxCopySize
+    value: 16
+  - key: modernize-loop-convert.MinConfidence
+    value: reasonable
+  - key: modernize-loop-convert.NamingStyle
+    value: CamelCase
+  - key: modernize-pass-by-value.IncludeStyle
+    value: llvm
+  - key: modernize-replace-auto-ptr.IncludeStyle
+    value: llvm
+  - key: modernize-use-nullptr.NullMacros
+    value: 'NULL'
+
+WarningsAsErrors: ''
+HeaderFilterRegex: '.*'
+AnalyzeTemporaryDtors: false
+FormatStyle: 'file'
+User: {{ project_name }}
+EOF
+        
+        log_success "Created .clang-tidy configuration"
+    fi
+    
+    if [[ -f "$config_file" ]]; then
+        log_debug "Using clang-tidy config: $config_file"
+        echo "$config_file"
+    fi
+}
+
+# Run clang-tidy analysis
+run_analysis() {
+    local clang_tidy_cmd="$1"
+    local compile_commands="$2"
+    shift 2
+    local source_files=("$@")
+    
+    mkdir -p "$ANALYSIS_DIR"
+    
+    # Prepare clang-tidy arguments
+    local tidy_args=(
+        -p "$(dirname "$compile_commands")"
+    )
+    
+    # Add checks if specified
+    if [[ -n "$CHECKS" ]]; then
+        tidy_args+=(--checks="$CHECKS")
+    fi
+    
+    # Add header filter
+    if [[ -n "$HEADER_FILTER" ]]; then
+        tidy_args+=(--header-filter="$HEADER_FILTER")
+    fi
+    
+    # Add format style
+    if [[ -n "$FORMAT_STYLE" ]]; then
+        tidy_args+=(--format-style="$FORMAT_STYLE")
+    fi
+    
+    # Add warnings as errors
+    if [[ "$WARNINGS_AS_ERRORS" == true ]]; then
+        tidy_args+=(--warnings-as-errors='*')
+    fi
+    
+    # Add fix mode
+    if [[ "$FIX_MODE" == true ]]; then
+        tidy_args+=(--fix)
+        if [[ "$FIX_ERRORS" == true ]]; then
+            tidy_args+=(--fix-errors)
+        fi
+    fi
+    
+    # Add extra args
+    if [[ -n "$EXTRA_ARGS" ]]; then
+        eval "tidy_args+=($EXTRA_ARGS)"
+    fi
+    
+    local total_files=${#source_files[@]}
+    local current_file=0
+    local issues_found=0
+    local files_with_issues=0
+    
+    # Output files for different formats
+    local text_output="$ANALYSIS_DIR/analysis_report.txt"
+    local json_output="$ANALYSIS_DIR/analysis_report.json"
+    local html_output="$ANALYSIS_DIR/analysis_report.html"
+    local sarif_output="$ANALYSIS_DIR/analysis_report.sarif"
+    
+    # Initialize output files
+    if [[ "$DRY_RUN" != true ]]; then
+        : > "$text_output"
+        echo "[]" > "$json_output"
+    fi
+    
+    log_analyze "Running clang-tidy analysis on $total_files files..."
+    
+    if [[ "$DRY_RUN" == true ]]; then
+        log_info "Would run: $clang_tidy_cmd ${tidy_args[*]} [source files...]"
+        return 0
+    fi
+    
+    # Process files
+    for source_file in "${source_files[@]}"; do
+        ((current_file++))
+        
+        if [[ "$QUIET" != true ]]; then
+            printf "\r${CYAN}🔍 [ANALYZE]${NC} Processing file %d/%d: %s" "$current_file" "$total_files" "$(basename "$source_file")"
+        fi
+        
+        # Skip if incremental mode and file hasn't changed
+        if [[ "$INCREMENTAL" == true ]] && [[ -f "$ANALYSIS_DIR/.last_analysis" ]]; then
+            if [[ "$source_file" -ot "$ANALYSIS_DIR/.last_analysis" ]]; then
+                log_debug "Skipping unchanged file: $source_file"
+                continue
+            fi
+        fi
+        
+        # Run clang-tidy on the file
+        local temp_output="/tmp/clang_tidy_$$_$current_file.txt"
+        local file_issues=0
+        
+        if "$clang_tidy_cmd" "${tidy_args[@]}" "$source_file" > "$temp_output" 2>&1; then
+            # No issues found
+            log_debug "No issues in $source_file"
+        else
+            # Issues found or error occurred
+            if [[ -s "$temp_output" ]]; then
+                file_issues=$(grep -c "warning:" "$temp_output" 2>/dev/null || echo 0)
+                ((issues_found += file_issues))
+                if [[ $file_issues -gt 0 ]]; then
+                    ((files_with_issues++))
+                fi
+                
+                # Append to text output
+                {
+                    echo "=== $source_file ==="
+                    cat "$temp_output"
+                    echo
+                } >> "$text_output"
+            fi
+        fi
+        
+        rm -f "$temp_output"
+    done
+    
+    if [[ "$QUIET" != true ]]; then
+        echo  # New line after progress
+    fi
+    
+    # Update last analysis timestamp for incremental mode
+    if [[ "$INCREMENTAL" == true ]]; then
+        touch "$ANALYSIS_DIR/.last_analysis"
+    fi
+    
+    # Generate reports in different formats
+    generate_reports "$issues_found" "$files_with_issues" "$total_files"
+    
+    # Summary
+    if [[ $issues_found -gt 0 ]]; then
+        log_warning "Found $issues_found issues in $files_with_issues files"
+        return 1
+    else
+        log_success "No issues found in $total_files files"
+        return 0
+    fi
+}
+
+# Generate reports in different formats
+generate_reports() {
+    local issues_found="$1"
+    local files_with_issues="$2"
+    local total_files="$3"
+    
+    local text_output="$ANALYSIS_DIR/analysis_report.txt"
+    local json_output="$ANALYSIS_DIR/analysis_report.json"
+    local html_output="$ANALYSIS_DIR/analysis_report.html"
+    
+    if [[ "$DRY_RUN" == true ]] || [[ "$NO_REPORT" == true ]]; then
+        return
+    fi
+    
+    # Generate JSON report
+    if [[ "$REPORT_FORMAT" == "json" ]] || [[ "$REPORT_FORMAT" == "all" ]]; then
+        log_debug "Generating JSON report..."
+        {
+            echo "{"
+            echo "  \"summary\": {"
+            echo "    \"total_files\": $total_files,"
+            echo "    \"files_with_issues\": $files_with_issues,"
+            echo "    \"total_issues\": $issues_found,"
+            echo "    \"timestamp\": \"$(date -Iseconds)\","
+            echo "    \"project\": \"{{ project_name }}\""
+            echo "  },"
+            echo "  \"files\": []"
+            echo "}"
+        } > "$json_output"
+        log_info "JSON report generated: $json_output"
+    fi
+    
+    # Generate HTML report
+    if [[ "$REPORT_FORMAT" == "html" ]] || [[ "$REPORT_FORMAT" == "all" ]]; then
+        log_debug "Generating HTML report..."
+        {
+            cat << 'EOF'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ project_name }} - Static Analysis Report</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; margin: 40px; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #333; border-bottom: 3px solid #007acc; padding-bottom: 10px; }
+        .summary { background: #f8f9fa; padding: 20px; border-radius: 6px; margin: 20px 0; }
+        .metric { display: inline-block; margin: 10px 20px 10px 0; }
+        .metric .number { font-size: 2em; font-weight: bold; color: #007acc; }
+        .metric .label { color: #666; }
+        .issues { margin-top: 30px; }
+        .file-section { margin: 20px 0; border: 1px solid #ddd; border-radius: 6px; }
+        .file-header { background: #f1f3f4; padding: 15px; font-weight: bold; border-bottom: 1px solid #ddd; }
+        .issue { padding: 15px; border-bottom: 1px solid #eee; }
+        .issue:last-child { border-bottom: none; }
+        .severity-warning { border-left: 4px solid #ff9800; }
+        .severity-error { border-left: 4px solid #f44336; }
+        .line-number { background: #e3f2fd; padding: 2px 6px; border-radius: 3px; font-family: monospace; }
+        pre { background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto; }
+        .timestamp { color: #666; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>{{ project_name }} Static Analysis Report</h1>
+        
+        <div class="summary">
+            <div class="metric">
+                <div class="number">
+EOF
+            echo "$total_files"
+            cat << 'EOF'
+                </div>
+                <div class="label">Files Analyzed</div>
+            </div>
+            <div class="metric">
+                <div class="number">
+EOF
+            echo "$issues_found"
+            cat << 'EOF'
+                </div>
+                <div class="label">Issues Found</div>
+            </div>
+            <div class="metric">
+                <div class="number">
+EOF
+            echo "$files_with_issues"
+            cat << 'EOF'
+                </div>
+                <div class="label">Files with Issues</div>
+            </div>
+            <div class="timestamp">Generated on: 
+EOF
+            date
+            cat << 'EOF'
+            </div>
+        </div>
+        
+        <div class="issues">
+            <h2>Analysis Results</h2>
+EOF
+            if [[ -f "$text_output" ]] && [[ -s "$text_output" ]]; then
+                echo "            <pre>"
+                sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g' "$text_output"
+                echo "            </pre>"
+            else
+                echo "            <p>No issues found! ✅</p>"
+            fi
+            cat << 'EOF'
+        </div>
+    </div>
+</body>
+</html>
+EOF
+        } > "$html_output"
+        log_info "HTML report generated: $html_output"
+    fi
+    
+    # Always keep text report
+    if [[ -f "$text_output" ]]; then
+        log_info "Text report available: $text_output"
+    fi
+}
+
+# Show configuration
+show_config() {
+    if [[ "$QUIET" == true ]]; then
+        return
+    fi
+    
+    log_info "Static Analysis Configuration:"
+    echo "  Project: {{ project_name }}"
+    echo "  Project Root: $PROJECT_ROOT"
+    echo "  Analysis Directory: $ANALYSIS_DIR"
+    echo "  Mode: $([ "$DRY_RUN" == true ] && echo "Dry Run" || echo "Execute")"
+    echo "  Report Format: $REPORT_FORMAT"
+    echo "  Incremental: $INCREMENTAL"
+    echo "  Fix Mode: $FIX_MODE"
+    echo "  Warnings as Errors: $WARNINGS_AS_ERRORS"
+    
+    if [[ -n "$CHECKS" ]]; then
+        echo "  Checks: $CHECKS"
+    fi
+    
+    if [[ ${#ANALYZE_PATHS[@]} -gt 0 ]]; then
+        echo "  Analyze Paths: ${ANALYZE_PATHS[*]}"
+    fi
+}
+
+# Print usage information
+print_usage() {
+    cat << EOF
+${BOLD}{{ project_name }} Static Analysis Script${NC}
+Run clang-tidy static analysis on the codebase
+
+${BOLD}USAGE:${NC}
+    $0 [OPTIONS] [FILES/DIRECTORIES...]
+
+${BOLD}ANALYSIS OPTIONS:${NC}
+    --checks CHECKS             Comma-separated list of checks to run
+    --header-filter REGEX       Regular expression for headers to analyze
+    --warnings-as-errors        Treat warnings as errors
+    --fix                       Apply suggested fixes automatically
+    --fix-errors                Apply fixes even if compilation errors exist
+
+${BOLD}INPUT OPTIONS:${NC}
+    --config FILE               Use specific .clang-tidy config file
+    --create-config             Create default .clang-tidy if it doesn't exist
+    --compile-commands FILE     Use specific compile_commands.json file
+    --build-type TYPE           Build type for compilation database (Debug/Release)
+    --cmake-args "ARGS"         Additional CMake arguments
+
+${BOLD}OUTPUT OPTIONS:${NC}
+    --format FORMAT             Report format: text, json, html, all (default: all)
+    --output-dir DIR            Output directory for reports (default: build/analysis)
+    --no-report                 Don't generate summary reports
+
+${BOLD}FILTERING OPTIONS:${NC}
+    --incremental               Only analyze files changed since last run
+    --severity LEVEL            Minimum severity level (warning, error)
+    --exclude-paths "PATHS"     Paths to exclude from analysis
+
+${BOLD}BEHAVIOR OPTIONS:${NC}
+    -n, --dry-run               Show what would be done without executing
+    -v, --verbose               Enable verbose output with detailed information
+    -q, --quiet                 Suppress non-essential output
+    --color                     Force colored output
+    --no-color                  Disable colored output
+
+${BOLD}UTILITY OPTIONS:${NC}
+    -h, --help                  Show this help message
+
+${BOLD}EXAMPLES:${NC}
+    $0                                  # Analyze entire project
+    $0 src/main.cpp                     # Analyze specific file
+    $0 src/ tests/                      # Analyze specific directories
+    $0 --checks="bugprone-*,cert-*"     # Run specific checks only
+    $0 --fix --format=html              # Apply fixes and generate HTML report
+    $0 --incremental --quiet            # Quick incremental analysis
+    $0 --dry-run --verbose              # Preview analysis with details
+
+${BOLD}CONFIGURATION:${NC}
+    The script looks for .clang-tidy configuration in the project root.
+    Use --create-config to generate a default configuration file.
+    
+    The script requires compile_commands.json for analysis.
+    It will be generated automatically if not found.
+
+${BOLD}REPORTS:${NC}
+    - Text report: analysis_report.txt
+    - JSON report: analysis_report.json  
+    - HTML report: analysis_report.html
+    
+    Reports are saved in build/analysis/ by default.
+
+EOF
+}
+
+# Default values
+ANALYZE_PATHS=()
+CHECKS=""
+HEADER_FILTER=""
+WARNINGS_AS_ERRORS=false
+FIX_MODE=false
+FIX_ERRORS=false
+CONFIG_FILE=""
+CREATE_CONFIG=true
+COMPILE_COMMANDS_FILE=""
+BUILD_TYPE="Debug"
+CUSTOM_CMAKE_ARGS=""
+REPORT_FORMAT="all"
+OUTPUT_DIR=""
+NO_REPORT=false
+INCREMENTAL=false
+SEVERITY=""
+EXCLUDE_PATHS=""
+DRY_RUN=false
+VERBOSE=false
+QUIET=false
+FORCE_COLOR=""
+FORMAT_STYLE=""
+EXTRA_ARGS=""
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --checks)
+            CHECKS="$2"
+            shift 2
+            ;;
+        --header-filter)
+            HEADER_FILTER="$2"
+            shift 2
+            ;;
+        --warnings-as-errors)
+            WARNINGS_AS_ERRORS=true
+            shift
+            ;;
+        --fix)
+            FIX_MODE=true
+            shift
+            ;;
+        --fix-errors)
+            FIX_ERRORS=true
+            shift
+            ;;
+        --config)
+            CONFIG_FILE="$2"
+            shift 2
+            ;;
+        --create-config)
+            CREATE_CONFIG=true
+            shift
+            ;;
+        --compile-commands)
+            COMPILE_COMMANDS_FILE="$2"
+            shift 2
+            ;;
+        --build-type)
+            BUILD_TYPE="$2"
+            shift 2
+            ;;
+        --cmake-args)
+            CUSTOM_CMAKE_ARGS="$2"
+            shift 2
+            ;;
+        --format)
+            REPORT_FORMAT="$2"
+            shift 2
+            ;;
+        --output-dir)
+            OUTPUT_DIR="$2"
+            shift 2
+            ;;
+        --no-report)
+            NO_REPORT=true
+            shift
+            ;;
+        --incremental)
+            INCREMENTAL=true
+            shift
+            ;;
+        --severity)
+            SEVERITY="$2"
+            shift 2
+            ;;
+        --exclude-paths)
+            EXCLUDE_PATHS="$2"
+            shift 2
+            ;;
+        -n|--dry-run)
+            DRY_RUN=true
+            shift
+            ;;
+        -v|--verbose)
+            VERBOSE=true
+            shift
+            ;;
+        -q|--quiet)
+            QUIET=true
+            shift
+            ;;
+        --color)
+            FORCE_COLOR=true
+            shift
+            ;;
+        --no-color)
+            FORCE_COLOR=false
+            shift
+            ;;
+        -h|--help)
+            print_usage
+            exit 0
+            ;;
+        -*)
+            log_error "Unknown option: $1"
+            print_usage
+            exit 1
+            ;;
+        *)
+            ANALYZE_PATHS+=("$1")
+            shift
+            ;;
+    esac
+done
+
+# Handle color output
+if [[ "$FORCE_COLOR" == false ]] || [[ ! -t 1 ]] || [[ "$QUIET" == true ]]; then
+    RED="" GREEN="" YELLOW="" BLUE="" PURPLE="" CYAN="" BOLD="" NC=""
+fi
+
+# Set output directory
+if [[ -n "$OUTPUT_DIR" ]]; then
+    ANALYSIS_DIR="$OUTPUT_DIR"
+fi
+
+# Main execution
+main() {
+    cd "$PROJECT_ROOT"
+    
+    # Print header
+    if [[ "$QUIET" != true ]]; then
+        log_info "Starting {{ project_name }} static analysis..."
+        echo
+    fi
+    
+    show_config
+    
+    if [[ "$QUIET" != true ]]; then
+        echo
+    fi
+    
+    # Check clang-tidy availability
+    local clang_tidy_cmd
+    if ! clang_tidy_cmd=$(check_clang_tidy); then
+        exit 1
+    fi
+    
+    # Ensure .clang-tidy configuration
+    ensure_clang_tidy_config
+    
+    # Ensure compilation database
+    local compile_commands
+    if [[ -n "$COMPILE_COMMANDS_FILE" ]]; then
+        compile_commands="$COMPILE_COMMANDS_FILE"
+        if [[ ! -f "$compile_commands" ]]; then
+            log_error "Specified compile_commands.json not found: $compile_commands"
+            exit 1
+        fi
+    elif ! compile_commands=$(ensure_compile_commands); then
+        log_error "Failed to find or generate compile_commands.json"
+        exit 1
+    fi
+    
+    log_debug "Using compile_commands.json: $compile_commands"
+    
+    # Find source files to analyze
+    local source_files
+    if ! source_files=($(find_source_files)); then
+        exit 1
+    fi
+    
+    # Run analysis
+    if run_analysis "$clang_tidy_cmd" "$compile_commands" "${source_files[@]}"; then
+        if [[ "$QUIET" != true ]]; then
+            echo
+            log_success "{{ project_name }} static analysis completed successfully!"
+        fi
+        exit 0
+    else
+        if [[ "$QUIET" != true ]]; then
+            echo
+            log_warning "{{ project_name }} static analysis completed with issues"
+        fi
+        exit 1
+    fi
+}
+
+# Run main function
+main "$@"

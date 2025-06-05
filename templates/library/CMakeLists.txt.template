@@ -1,0 +1,214 @@
+cmake_minimum_required(VERSION 3.20)
+
+# Enable C++20 module scanning (requires CMake 3.28+ ideally, but try with older versions)
+# For Clang, this helps with dependency discovery for modules.
+# Must be set before project() for some CMake versions/generators to take full effect.
+# set(CMAKE_CXX_SCAN_FOR_MODULES ON) # Temporarily disabled to avoid issues with FindThreads.cmake on CMake 3.20 + AppleClang
+
+# Project configuration
+project({{ project_name }} 
+    VERSION {{ project_version | default("1.0.0") }}
+    DESCRIPTION "{{ project_description | default("A modern C++20 library") }}"
+    LANGUAGES CXX
+)
+
+# Set C++20 standard
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Output directories
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+
+# Include custom CMake modules
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
+
+# Setup vcpkg integration
+# Ensure VCPKG_ROOT is set in the environment, or vcpkg is available via FetchContent elsewhere
+if(DEFINED ENV{VCPKG_ROOT} AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
+    set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "Vcpkg toolchain file")
+    message(STATUS "Using vcpkg toolchain from VCPKG_ROOT: $ENV{VCPKG_ROOT}")
+elseif(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
+    message(WARNING "VCPKG_ROOT is not set and CMAKE_TOOLCHAIN_FILE is not defined. vcpkg packages might not be found correctly.")
+endif()
+
+# Include VcpkgHelpers for smart package management
+include(VcpkgHelpers)
+
+# Compiler-specific options
+if(MSVC)
+    add_compile_options(/W4 /WX /utf-8)
+    add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
+else()
+    add_compile_options(-Wall -Wextra -Wpedantic -Werror)
+    
+    # Enable additional warnings for GCC/Clang
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        add_compile_options(-Wlogical-op -Wduplicated-cond -Wduplicated-branches)
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        add_compile_options(-Wno-missing-braces)
+    endif()
+endif()
+
+# Build type specific flags
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    add_compile_definitions(DEBUG)
+    if(NOT MSVC)
+        add_compile_options(-g -O0)
+    endif()
+elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
+    add_compile_definitions(NDEBUG)
+    if(NOT MSVC)
+        add_compile_options(-O3 -DNDEBUG)
+    endif()
+endif()
+
+# Find all packages from vcpkg.json
+vcpkg_find_packages()
+
+# Create a library for the C++20 module
+# add_library(utils_module_lib STATIC)
+# target_sources(utils_module_lib
+#     PUBLIC
+#         FILE_SET CXX_MODULES FILES
+#         ${CMAKE_CURRENT_SOURCE_DIR}/modules/utils.cppm
+# )
+# target_compile_features(utils_module_lib PUBLIC cxx_std_20)
+
+# Define library sources
+set(LIBRARY_SOURCES
+    src/library.cpp
+)
+
+set(LIBRARY_HEADERS
+    include/library.hpp
+)
+
+# Create library target
+add_library({{ project_name }} STATIC ${LIBRARY_SOURCES})
+
+# Set library properties
+set_target_properties({{ project_name }} PROPERTIES
+    VERSION ${PROJECT_VERSION}
+    SOVERSION ${PROJECT_VERSION_MAJOR}
+    OUTPUT_NAME {{ project_name | lower }}
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON
+)
+
+# Include directories for the library
+target_include_directories({{ project_name }}
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include> # For installed library
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+# Link libraries from vcpkg to the library target
+vcpkg_link_libraries(TARGET {{ project_name }} LINK_TYPE PUBLIC) # Use PUBLIC if headers include vcpkg deps
+
+# Link standard required libraries
+find_package(Threads REQUIRED)
+target_link_libraries({{ project_name }} PUBLIC Threads::Threads) # Use PUBLIC if headers include Threads
+
+# Create alias for easier usage in subdirectories
+add_library({{ project_name }}::{{ project_name }} ALIAS {{ project_name }})
+
+# Example executable (optional)
+option(BUILD_EXAMPLE "Build example executable" ON)
+if(BUILD_EXAMPLE)
+    # Create examples directory and main.cpp if they don't exist
+    set(EXAMPLE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/examples)
+    set(EXAMPLE_MAIN_FILE ${EXAMPLE_DIR}/main.cpp)
+    if(NOT EXISTS ${EXAMPLE_DIR})
+        file(MAKE_DIRECTORY ${EXAMPLE_DIR})
+    endif()
+    if(NOT EXISTS ${EXAMPLE_MAIN_FILE})
+        file(WRITE ${EXAMPLE_MAIN_FILE} 
+"#include <library.hpp>\n#include <iostream>\n\nint main() {\n    std::cout << \"{{ project_name }} example program\\n\";\n    // TODO: Add example usage of your library functions here\n    return 0;\n}\n")
+    endif()
+
+    add_executable({{ project_name }}_example ${EXAMPLE_MAIN_FILE})
+    target_link_libraries({{ project_name }}_example PRIVATE {{ project_name }}::{{ project_name }})
+    # Link the example against the module library
+    # target_link_libraries({{ project_name }}_example PRIVATE utils_module_lib)
+    
+    # Link vcpkg dependencies to the example executable as well, if they are not already public from the library
+    # If the library links vcpkg deps as PUBLIC, this might not be strictly necessary
+    # but linking them explicitly to the example ensures it gets what it needs.
+    vcpkg_link_libraries(TARGET {{ project_name }}_example LINK_TYPE PRIVATE)
+
+endif()
+
+# Enable testing
+enable_testing()
+
+# Add tests (always enabled)
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/tests)
+    add_subdirectory(tests)
+endif()
+
+# Installation rules
+include(GNUInstallDirs)
+
+# Install the library
+install(TARGETS {{ project_name }}
+    EXPORT {{ project_name }}Targets
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} # For shared libs on Windows
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+# Install headers
+install(FILES ${LIBRARY_HEADERS}
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/{{ project_name | lower }}
+)
+
+# Install CMake config files
+install(EXPORT {{ project_name }}Targets
+    FILE {{ project_name }}Targets.cmake
+    NAMESPACE {{ project_name }}::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/{{ project_name }}
+)
+
+# Generate {{ project_name }}Config.cmake and {{ project_name }}ConfigVersion.cmake
+# Ensure you have a {{ project_name }}Config.cmake.in file in your cmake/ directory
+set(CONFIG_CMAKE_IN_FILE ${CMAKE_CURRENT_SOURCE_DIR}/cmake/{{ project_name }}Config.cmake.in)
+if(NOT EXISTS ${CONFIG_CMAKE_IN_FILE})
+    file(WRITE ${CONFIG_CMAKE_IN_FILE}
+"@PACKAGE_INIT@\n\ninclude(CMakeFindDependencyMacro)\n# find_dependency(PkgName REQUIRED)\n\nif(NOT TARGET {{ project_name }}::{{ project_name }})\n    include(\"${CMAKE_CURRENT_LIST_DIR}/{{ project_name }}Targets.cmake\")\nendif()\n"
+    )
+    message(STATUS "Generated dummy {{ project_name }}Config.cmake.in. Please review and customize.")
+endif()
+
+include(CMakePackageConfigHelpers)
+configure_package_config_file(
+    ${CONFIG_CMAKE_IN_FILE}
+    ${CMAKE_CURRENT_BINARY_DIR}/{{ project_name }}Config.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/{{ project_name }}
+    # PATH_VARS some_path # Add any path variables your Config.cmake.in might need
+)
+
+write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/{{ project_name }}ConfigVersion.cmake
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/{{ project_name }}Config.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/{{ project_name }}ConfigVersion.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/{{ project_name }}
+)
+
+# CPack configuration for packaging
+set(CPACK_PACKAGE_NAME "{{ project_name }}")
+set(CPACK_PACKAGE_VERSION "{{ project_version | default("1.0.0") }}")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "{{ project_description | default("A modern C++20 library") }}")
+set(CPACK_PACKAGE_VENDOR "{{ project_author | default("Developer") }}")
+
+include(CPack) 

@@ -1,0 +1,404 @@
+# {{ project_name }}
+
+{{ project_description | default('A modern C++20 project') }}
+
+[![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://isocpp.org/std/the-standard)
+[![CMake](https://img.shields.io/badge/CMake-3.20+-blue.svg)](https://cmake.org/)
+{% if optional_libraries.fmt -%}
+[![fmt](https://img.shields.io/badge/fmt-latest-green.svg)](https://github.com/fmtlib/fmt)
+{% endif -%}
+{% if optional_libraries.spdlog -%}
+[![spdlog](https://img.shields.io/badge/spdlog-latest-green.svg)](https://github.com/gabime/spdlog)
+{% endif -%}
+
+## 📋 Table of Contents
+
+- [Overview](#overview)
+- [Features](#features)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Build Instructions](#build-instructions)
+- [Usage](#usage)
+{% if project_type == "library" -%}
+- [API Documentation](#api-documentation)
+{% endif -%}
+- [Testing](#testing)
+- [Development](#development)
+- [Contributing](#contributing)
+- [License](#license)
+- [Changelog](#changelog)
+
+## 🚀 Overview
+
+{{ project_description | default('This project demonstrates modern C++20 features and best practices.') }}
+
+## ✨ Features
+
+{% if project_type == "console" -%}
+- 🎯 Modern C++20 console application
+{% else -%}
+- 📚 Modern C++20 library with clean API
+{% endif -%}
+- 🏗️ CMake-based build system with vcpkg integration
+- 🧪 Comprehensive test suite using Catch2
+- 📖 Automated documentation generation with Doxygen
+- 🔧 Cross-platform compatibility (Windows, macOS, Linux)
+- 🚀 Built-in support for popular C++ libraries:
+  {% if optional_libraries.fmt -%}
+  - [fmt](https://github.com/fmtlib/fmt) for string formatting
+  {% endif -%}
+  {% if optional_libraries.spdlog -%}
+  - [spdlog](https://github.com/gabime/spdlog) for fast logging
+  {% endif -%}
+  {% if optional_libraries.boost -%}
+  - [Boost](https://www.boost.org/) for additional utilities
+  {% endif -%}
+  {% if optional_libraries.openssl -%}
+  - [OpenSSL](https://www.openssl.org/) for cryptography
+  {% endif -%}
+
+## 📋 Requirements
+
+### System Requirements
+- **C++ Compiler**: C++20 compatible compiler
+  - GCC 10+ 
+  - Clang 12+
+  - MSVC 19.29+ (Visual Studio 2019 16.10+)
+- **CMake**: 3.20 or higher
+- **vcpkg**: Latest version (for dependency management)
+
+### Platform Support
+- ✅ Windows 10/11
+- ✅ macOS 11+ (Big Sur and later)
+- ✅ Ubuntu 20.04 LTS+
+- ✅ Other Linux distributions with compatible compilers
+
+## 🛠️ Installation
+
+### Prerequisites
+
+1. **Install vcpkg** (if not already installed):
+   ```bash
+   git clone https://github.com/Microsoft/vcpkg.git
+   cd vcpkg
+   # Windows
+   .\bootstrap-vcpkg.bat
+   # macOS/Linux  
+   ./bootstrap-vcpkg.sh
+   ```
+
+2. **Set environment variable**:
+   ```bash
+   # Add to your shell profile (.bashrc, .zshrc, etc.)
+   export VCPKG_ROOT=/path/to/vcpkg
+   ```
+
+### Quick Start
+
+```bash
+# Clone the repository
+git clone <repository-url> {{ project_name | lower }}
+cd {{ project_name | lower }}
+
+# Build the project
+chmod +x scripts/build.sh
+./scripts/build.sh
+
+# Run the application
+{% if project_type == "console" -%}
+./build/bin/{{ project_name | lower }}
+{% else -%}
+./build/bin/{{ project_name | lower }}_example
+{% endif -%}
+
+# Run tests
+cd build && ctest --verbose
+```
+
+## 🏗️ Build Instructions
+
+### Using Build Script (Recommended)
+
+The project includes a convenient build script that handles all dependencies:
+
+```bash
+# Make the script executable
+chmod +x scripts/build.sh
+
+# Build in Release mode (default)
+./scripts/build.sh
+
+# Build in Debug mode
+./scripts/build.sh --config Debug
+
+# Clean build
+./scripts/build.sh --clean
+
+# Verbose output
+./scripts/build.sh --verbose
+```
+
+### Manual CMake Build
+
+If you prefer manual control over the build process:
+
+```bash
+# Create build directory
+mkdir -p build && cd build
+
+# Configure with CMake
+cmake .. -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake
+
+# Build
+ninja
+
+# Install (optional)
+ninja install
+```
+
+### Build Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `CMAKE_BUILD_TYPE` | Build configuration (Debug/Release/RelWithDebInfo/MinSizeRel) | Release |
+| `BUILD_SHARED_LIBS` | Build shared libraries instead of static | OFF |
+{% if project_type == "library" -%}
+| `BUILD_EXAMPLES` | Build example applications | ON |
+{% endif -%}
+| `ENABLE_SANITIZERS` | Enable AddressSanitizer and UBSan in Debug builds | ON |
+| `ENABLE_WARNINGS` | Enable additional compiler warnings | ON |
+
+Example:
+```bash
+cmake .. -DCMAKE_BUILD_TYPE=Debug -DENABLE_SANITIZERS=ON
+```
+
+## 📖 Usage
+
+{% if project_type == "console" -%}
+### Running the Application
+
+```bash
+# Basic usage
+./build/bin/{{ project_name | lower }}
+
+# With command-line arguments (if supported)
+./build/bin/{{ project_name | lower }} --help
+```
+
+### Example Output
+
+```
+{{ project_name }} - A modern C++20 application
+Version: {{ project_version | default('1.0.0') }}
+
+[Example output here]
+```
+{% else -%}
+### Including in Your Project
+
+#### CMake Integration
+
+```cmake
+# Find the library
+find_package({{ project_name }} REQUIRED)
+
+# Link to your target
+target_link_libraries(your_target PRIVATE {{ project_name }}::{{ project_name }})
+```
+
+#### Basic Usage Example
+
+```cpp
+#include <library.hpp>
+#include <iostream>
+
+int main() {
+    // Example usage of the library
+    // TODO: Add actual library usage examples
+    
+    std::cout << "Using {{ project_name }} library\n";
+    return 0;
+}
+```
+
+### Running Examples
+
+```bash
+# Run the example application
+./build/bin/{{ project_name | lower }}_example
+```
+{% endif -%}
+
+{% if project_type == "library" -%}
+## 📚 API Documentation
+
+### Generating Documentation
+
+Generate API documentation using Doxygen:
+
+```bash
+# Generate documentation
+chmod +x scripts/generate_docs.sh
+./scripts/generate_docs.sh
+
+# Open documentation
+open docs/html/index.html  # macOS
+xdg-open docs/html/index.html  # Linux
+```
+
+### Online Documentation
+
+[Link to online documentation if available]
+{% endif -%}
+
+## 🧪 Testing
+
+The project uses [Catch2](https://github.com/catchorg/Catch2) for unit testing.
+
+### Running Tests
+
+```bash
+# Build and run all tests
+cd build && ctest --verbose
+
+# Run specific test
+ctest -R "test_name_pattern"
+
+# Run tests with output
+./bin/{{ project_name | lower }}_tests
+```
+
+### Test Coverage
+
+Generate test coverage reports (requires GCC/Clang):
+
+```bash
+# Build with coverage flags
+cmake .. -DCMAKE_BUILD_TYPE=Debug -DENABLE_COVERAGE=ON
+ninja
+
+# Run tests and generate coverage
+ctest
+ninja coverage
+
+# View coverage report
+open coverage/index.html
+```
+
+### Adding New Tests
+
+Tests are located in the `tests/` directory. To add new tests:
+
+1. Create a new `.cpp` file in `tests/`
+2. Follow the Catch2 syntax:
+   ```cpp
+   #include <catch2/catch_test_macros.hpp>
+   
+   TEST_CASE("Your test description", "[tag]") {
+       REQUIRE(condition == expected);
+   }
+   ```
+3. The test will be automatically discovered and run
+
+## 👨‍💻 Development
+
+### Project Structure
+
+```
+{{ project_name | lower }}/
+├── CMakeLists.txt          # Main CMake configuration
+├── vcpkg.json             # Dependency manifest
+├── README.md              # This file
+├── CHANGELOG.md           # Version history
+├── CONTRIBUTING.md        # Development guidelines
+{% if project_type == "library" -%}
+├── include/               # Public headers
+│   └── library.hpp
+├── src/                   # Source files
+│   └── library.cpp
+{% else -%}
+├── src/                   # Source files
+│   └── main.cpp
+{% endif -%}
+├── tests/                 # Test files
+│   ├── CMakeLists.txt
+│   └── test_*.cpp
+├── scripts/               # Build and utility scripts
+│   ├── build.sh
+│   └── generate_docs.sh
+├── cmake/                 # CMake modules
+│   └── VcpkgHelpers.cmake
+└── docs/                  # Documentation (generated)
+```
+
+### Code Style
+
+This project follows modern C++20 best practices:
+
+- Use `auto` where type deduction improves readability
+- Prefer range-based for loops and STL algorithms
+- Use smart pointers for memory management
+- Follow RAII principles
+- Use `constexpr` and `noexcept` where appropriate
+- Prefer `std::string_view` for read-only string parameters
+
+### IDE Setup
+
+#### Visual Studio Code
+1. Install the C/C++ extension
+2. Install the CMake Tools extension
+3. Open the project folder
+4. Configure CMake integration
+
+#### CLion
+1. Open the project folder
+2. CLion will automatically detect CMake configuration
+3. Configure vcpkg toolchain path in settings
+
+## 🤝 Contributing
+
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+### Quick Start for Contributors
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Make your changes
+4. Add tests for new functionality
+5. Ensure all tests pass: `ctest`
+6. Commit your changes: `git commit -m 'Add amazing feature'`
+7. Push to the branch: `git push origin feature/amazing-feature`
+8. Open a Pull Request
+
+## 📄 License
+
+This project is licensed under the [MIT License](LICENSE) - see the LICENSE file for details.
+
+## 📝 Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for a complete list of changes and version history.
+
+## 🙏 Acknowledgments
+
+- [vcpkg](https://github.com/Microsoft/vcpkg) for dependency management
+- [Catch2](https://github.com/catchorg/Catch2) for testing framework
+- [CMake](https://cmake.org/) for build system
+{% if optional_libraries.fmt -%}
+- [fmt](https://github.com/fmtlib/fmt) for string formatting
+{% endif -%}
+{% if optional_libraries.spdlog -%}
+- [spdlog](https://github.com/gabime/spdlog) for logging
+{% endif -%}
+
+## 📧 Contact
+
+{{ project_author | default('Project Maintainer') }} - [contact information]
+
+Project Link: [repository-url]
+
+---
+
+**{{ project_name }}** - Modern C++20 Development Made Easy 

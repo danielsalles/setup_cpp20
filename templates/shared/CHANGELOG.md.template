@@ -1,0 +1,134 @@
+# Changelog
+
+All notable changes to {{ project_name }} will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+- Initial project setup
+{% if project_type == "console" -%}
+- Basic console application structure
+{% else -%}
+- Basic library structure with public API
+{% endif -%}
+- CMake-based build system with vcpkg integration
+- Comprehensive test suite using Catch2
+- Documentation generation with Doxygen
+- Cross-platform support (Windows, macOS, Linux)
+{% if optional_libraries.fmt -%}
+- Integration with fmt library for string formatting
+{% endif -%}
+{% if optional_libraries.spdlog -%}
+- Integration with spdlog for fast logging
+{% endif -%}
+{% if optional_libraries.boost -%}
+- Integration with Boost libraries
+{% endif -%}
+{% if optional_libraries.openssl -%}
+- Integration with OpenSSL for cryptography
+{% endif -%}
+
+### Changed
+- Nothing yet
+
+### Deprecated
+- Nothing yet
+
+### Removed
+- Nothing yet
+
+### Fixed
+- Nothing yet
+
+### Security
+- Nothing yet
+
+## [{{ project_version | default('1.0.0') }}] - {% now 'utc', '%Y-%m-%d' %}
+
+### Added
+- Initial release of {{ project_name }}
+{% if project_type == "console" -%}
+- Modern C++20 console application template
+{% else -%}
+- Modern C++20 library template with clean API
+{% endif -%}
+- CMake 3.20+ build system with automatic dependency management
+- vcpkg integration for external libraries
+- Automated testing with Catch2 framework
+- Comprehensive documentation and examples
+- Cross-platform compatibility
+- Development tools and scripts
+
+{% if project_type == "library" -%}
+### Features
+- Clean, modern C++20 API design
+- Header-only option available
+- CMake package support for easy integration
+- Example applications demonstrating usage
+{% endif -%}
+
+### Technical Details
+- **C++ Standard**: C++20
+- **Minimum CMake**: 3.20
+- **Supported Compilers**: 
+  - GCC 10+
+  - Clang 12+
+  - MSVC 19.29+ (Visual Studio 2019 16.10+)
+- **Supported Platforms**: Windows, macOS, Linux
+
+---
+
+## How to Update This Changelog
+
+When making changes to the project, follow these guidelines:
+
+### Categories
+
+Use these standard categories in order:
+
+- **Added** for new features
+- **Changed** for changes in existing functionality
+- **Deprecated** for soon-to-be removed features
+- **Removed** for now removed features
+- **Fixed** for any bug fixes
+- **Security** for security-related changes
+
+### Formatting
+
+- Keep the changelog in reverse chronological order (newest first)
+- Use ISO date format (YYYY-MM-DD) for release dates
+- Link to relevant issues/PRs when possible
+- Write entries from the user's perspective
+- Use present tense ("Add feature" not "Added feature")
+
+### Examples
+
+```markdown
+## [1.2.0] - 2024-01-15
+
+### Added
+- New configuration system for easier setup (#123)
+- Support for custom plugins (#145)
+- CLI command for batch processing (#156)
+
+### Changed
+- Improved performance of core algorithms by 30% (#134)
+- Updated minimum CMake version to 3.22 (#142)
+
+### Fixed
+- Memory leak in file processing module (#139)
+- Crash when handling empty input files (#147)
+
+### Security
+- Updated dependencies to address CVE-2024-12345 (#151)
+```
+
+---
+
+For more information about maintaining this changelog, see:
+- [Keep a Changelog](https://keepachangelog.com/)
+- [Semantic Versioning](https://semver.org/)
+- [Contributing Guidelines](CONTRIBUTING.md) 

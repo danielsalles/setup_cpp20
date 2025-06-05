@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Development Workflow Documentation</title>
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; 
+            max-width: 1200px; 
+            margin: 0 auto; 
+            padding: 20px; 
+            line-height: 1.6;
+            color: #333;
+        }
+        h1, h2, h3 { color: #2c3e50; border-bottom: 2px solid #ecf0f1; padding-bottom: 10px; }
+        code { 
+            background-color: #f8f9fa; 
+            padding: 2px 6px; 
+            border-radius: 4px; 
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        }
+        pre { 
+            background-color: #f8f9fa; 
+            padding: 15px; 
+            border-radius: 8px; 
+            overflow-x: auto; 
+            border-left: 4px solid #3498db;
+        }
+        table { 
+            border-collapse: collapse; 
+            width: 100%; 
+            margin: 20px 0;
+        }
+        th, td { 
+            border: 1px solid #ddd; 
+            padding: 12px; 
+            text-align: left; 
+        }
+        th { 
+            background-color: #34495e; 
+            color: white;
+        }
+        .toc { 
+            background-color: #ecf0f1; 
+            padding: 20px; 
+            border-radius: 8px; 
+            margin-bottom: 30px; 
+        }
+        .emoji { font-size: 1.2em; }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        blockquote {
+            border-left: 4px solid #3498db;
+            margin: 0;
+            padding-left: 20px;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+<h1>Development Scripts Workflow</h1>
+<p></p>
+<p>Welcome to the <strong>\1</strong> development scripts ecosystem! This directory contains a comprehensive collection of scripts designed to streamline your C++20 development workflow, from building and testing to deployment and maintenance.</p>
+<p></p>
+<h2>📋 Quick Start</h2>
+<p></p>
+<pre><code>
+# Build your project
+./build.sh --release
+
+# Run tests with coverage
+./test.sh --coverage --html
+
+# Format your code
+./format.sh --check
+
+# Run static analysis
+./analyze.sh --fix
+
+# Clean build artifacts
+./clean.sh --all
+</code></pre>
+<p></p>
+<h2>🗂️ Script Categories</h2>
+<p></p>
+<h3>🏗️ Core Development Scripts</h3>
+<p></p>
+<table>
+<tr><td>Script</td><td>Purpose</td><td>Location</td></tr>
+</table>
+<p>|--------|---------|----------|</p>
+<table>
+<tr><td>[`build.sh`](#build-script)</td><td>Project compilation and build management</td><td>`templates/shared/scripts/`</td></tr>
+<tr><td>[`test.sh`](#test-script)</td><td>Test execution with coverage and reporting</td><td>`templates/shared/scripts/`</td></tr>
+<tr><td>[`format.sh`](#format-script)</td><td>Code formatting with clang-format</td><td>`templates/shared/scripts/`</td></tr>
+<tr><td>[`analyze.sh`](#analyze-script)</td><td>Static analysis with clang-tidy</td><td>`templates/shared/scripts/`</td></tr>
+</table>
+<p></p>
+<h3>🛠️ Maintenance Scripts</h3>
+<p></p>
+<table>
+<tr><td>Script</td><td>Purpose</td><td>Location</td></tr>
+</table>
+<p>|--------|---------|----------|</p>
+<table>
+<tr><td>[`clean.sh`](#clean-script)</td><td>Build artifacts and temporary file cleanup</td><td>`templates/shared/scripts/`</td></tr>
+<tr><td>[`cache-clear.sh`](#cache-clear-script)</td><td>CMake and vcpkg cache management</td><td>`templates/shared/scripts/`</td></tr>
+<tr><td>[`deps-update.sh`](#deps-update-script)</td><td>Dependency management and updates</td><td>`templates/shared/scripts/`</td></tr>
+<tr><td>[`sanitize.sh`](#sanitize-script)</td><td>Runtime sanitizer analysis</td><td>`templates/shared/scripts/`</td></tr>
+<tr><td>[`version-bump.sh`](#version-bump-script)</td><td>Project version management</td><td>`templates/shared/scripts/`</td></tr>
+</table>
+<p></p>
+<h3>🚀 CI/CD Integration Scripts</h3>
+<p></p>
+<table>
+<tr><td>Script</td><td>Purpose</td><td>Location</td></tr>
+</table>
+<p>|--------|---------|----------|</p>
+<table>
+<tr><td>[`ci-build.sh`](#ci-build-script)</td><td>CI/CD optimized build process</td><td>`templates/shared/scripts/ci/`</td></tr>
+<tr><td>[`ci-validate.sh`](#ci-validate-script)</td><td>Pre-merge validation suite</td><td>`templates/shared/scripts/ci/`</td></tr>
+<tr><td>[`ci-package.sh`](#ci-package-script)</td><td>Package creation for distribution</td><td>`templates/shared/scripts/ci/`</td></tr>
+<tr><td>[`ci-deploy.sh`](#ci-deploy-script)</td><td>Deployment automation</td><td>`templates/shared/scripts/ci/`</td></tr>
+<tr><td>[`ci-docs.sh`](#ci-docs-script)</td><td>Documentation generation</td><td>`templates/shared/scripts/ci/`</td></tr>
+</table>
+<p></p>
+<h3>🔧 Utility Scripts</h3>
+<p></p>
+<table>
+<tr><td>Script</td><td>Purpose</td><td>Location</td></tr>
+</table>
+<p>|--------|---------|----------|</p>
+<table>
+<tr><td>[`platform_compat.sh`](#platform-compat)</td><td>Cross-platform compatibility layer</td><td>`templates/shared/scripts/utils/`</td></tr>
+<tr><td>[`migrate_to_compat.sh`](#migrate-script)</td><td>Migration tool for compatibility</td><td>`templates/shared/scripts/utils/`</td></tr>
+<tr><td>[`generate_docs.sh.template`](#generate-docs)</td><td>Documentation generation template</td><td>`templates/shared/scripts/`</td></tr>
+</table>
+<p></p>
+<p>For detailed documentation of each script, see the [Complete Script Reference](#complete-script-reference) below.</p>
+<p></p>
+<h2>🏗️ Development Workflows</h2>
+<p></p>
+<h3>Standard Development Workflow</h3>
+<p></p>
+<pre><code>
+# 1. Set up development environment
+./cache-clear.sh --reconfigure
+./deps-update.sh
+
+# 2. Development cycle
+./format.sh --git-changed --in-place
+./build.sh --debug --sanitizer address
+./test.sh --coverage
+
+# 3. Pre-commit validation
+./format.sh --check
+./analyze.sh --checks modernize-*,readability-*
+./test.sh --fail-fast
+
+# 4. Release preparation
+./clean.sh --all
+./build.sh --release
+./test.sh --xml --html
+./ci-package.sh
+</code></pre>
+<p></p>
+<h3>CI/CD Workflow</h3>
+<p></p>
+<pre><code>
+# 1. Validation phase
+./ci-validate.sh
+
+# 2. Build matrix
+./ci-build.sh --matrix-build
+
+# 3. Package creation
+./ci-package.sh --all
+
+# 4. Deployment
+./ci-deploy.sh --environment staging
+</code></pre>
+<p></p>
+<h2>🎯 Quick Reference</h2>
+<p></p>
+<h3>Build & Test</h3>
+<p></p>
+<pre><code>
+# Development build with checks
+./build.sh --debug --sanitizer address --coverage
+./test.sh --coverage --html
+
+# Production build
+./build.sh --release --compiler clang++ --ccache
+./test.sh --xml
+</code></pre>
+<p></p>
+<h3>Code Quality</h3>
+<p></p>
+<pre><code>
+# Format and analyze
+./format.sh --git-changed --in-place
+./analyze.sh --fix --checks modernize-*
+
+# Comprehensive validation
+./ci-validate.sh
+</code></pre>
+<p></p>
+<h3>Maintenance</h3>
+<p></p>
+<pre><code>
+# Clean project
+./clean.sh --all
+./cache-clear.sh
+
+# Update dependencies
+./deps-update.sh --upgrade
+</code></pre>
+<p></p>
+<h2>🐛 Troubleshooting</h2>
+<p></p>
+<h3>Common Issues</h3>
+<p></p>
+<p><strong>\1</strong></p>
+<pre><code>
+./cache-clear.sh --vcpkg
+./deps-update.sh --update-vcpkg --bootstrap
+</code></pre>
+<p></p>
+<p><strong>\1</strong></p>
+<pre><code>
+./format.sh --create-config --style Google
+</code></pre>
+<p></p>
+<p><strong>\1</strong></p>
+<pre><code>
+./sanitize.sh --asan --verbose
+./test.sh --framework catch2 --verbose
+</code></pre>
+<p></p>
+<h2>📖 Complete Script Reference</h2>
+<p></p>
+<h3>Build Script (`build.sh`)</h3>
+<p></p>
+<p>Advanced build management with extensive configuration options.</p>
+<p></p>
+<pre><code>
+# Basic usage
+./build.sh                    # Default debug build
+./build.sh --release         # Release build
+
+# Advanced options
+./build.sh --compiler clang++ --ccache --jobs 8
+./build.sh --cmake-args "-DENABLE_TESTING=ON"
+./build.sh --sanitizer address --coverage
+</code></pre>
+<p></p>
+<p><strong>\1</strong></p>
+<p>- Compiler selection (GCC, Clang, MSVC)</p>
+<p>- Build types (Debug, Release, RelWithDebInfo, MinSizeRel)</p>
+<p>- Performance optimization (ccache, parallel builds)</p>
+<p>- Analysis integration (sanitizers, static analysis)</p>
+<p>- Cross-platform support</p>
+<p></p>
+<h3>Test Script (`test.sh`)</h3>
+<p></p>
+<p>Comprehensive test execution with reporting and coverage.</p>
+<p></p>
+<pre><code>
+# Basic testing
+./test.sh                     # Run all tests
+./test.sh --coverage         # Generate coverage reports
+
+# Advanced testing
+./test.sh --framework catch2 --shuffle --timeout 30
+./test.sh --xml --html --gcovr
+</code></pre>
+<p></p>
+<p><strong>\1</strong></p>
+<p>- Framework support (Catch2, Google Test, CTest)</p>
+<p>- Report generation (XML, JSON, HTML)</p>
+<p>- Coverage analysis (lcov, gcovr)</p>
+<p>- Test management (filtering, shuffling, timeouts)</p>
+<p></p>
+<h3>Format Script (`format.sh`)</h3>
+<p></p>
+<p>Code formatting with clang-format integration.</p>
+<p></p>
+<pre><code>
+# Check formatting
+./format.sh --check
+
+# Format files
+./format.sh --git-changed --in-place
+./format.sh --create-config --style Google
+</code></pre>
+<p></p>
+<p><strong>\1</strong></p>
+<p>- Style presets (Google, LLVM, Chromium, Mozilla, WebKit)</p>
+<p>- Git integration (format changed files only)</p>
+<p>- Pre-commit hook support</p>
+<p>- Configuration management</p>
+<p></p>
+<h3>Analyze Script (`analyze.sh`)</h3>
+<p></p>
+<p>Static analysis with clang-tidy.</p>
+<p></p>
+<pre><code>
+# Basic analysis
+./analyze.sh                  # Analyze all files
+./analyze.sh --fix           # Apply fixes
+
+# Advanced analysis
+./analyze.sh --checks modernize-*,readability-*
+./analyze.sh --format json --output report.json
+</code></pre>
+<p></p>
+<p><strong>\1</strong></p>
+<p>- Check categories (modernize, readability, performance)</p>
+<p>- Output formats (text, HTML, JSON)</p>
+<p>- Automatic fixes</p>
+<p>- Incremental analysis</p>
+<p></p>
+<h3>Clean Script (`clean.sh`)</h3>
+<p></p>
+<p>Project cleanup and maintenance.</p>
+<p></p>
+<pre><code>
+# Basic cleanup
+./clean.sh                   # Clean build artifacts
+./clean.sh --all            # Deep clean
+
+# Targeted cleanup
+./clean.sh --category build,temp,cmake
+./clean.sh --dry-run --preserve-ide
+</code></pre>
+<p></p>
+<p><strong>\1</strong></p>
+<p>- build: Build directories and object files</p>
+<p>- temp: Temporary files</p>
+<p>- cmake: CMake cache and generated files</p>
+<p>- vcpkg: vcpkg build artifacts</p>
+<p>- ide: IDE-generated files</p>
+<p>- test: Test outputs and coverage data</p>
+<p></p>
+<h3>Cache Clear Script (`cache-clear.sh`)</h3>
+<p></p>
+<p>Cache management and project reset.</p>
+<p></p>
+<pre><code>
+# Clear all caches
+./cache-clear.sh
+
+# Targeted clearing
+./cache-clear.sh --cmake --vcpkg --compiler
+./cache-clear.sh --reconfigure --build-type Release
+</code></pre>
+<p></p>
+<h3>Dependencies Update Script (`deps-update.sh`)</h3>
+<p></p>
+<p>Dependency management with vcpkg.</p>
+<p></p>
+<pre><code>
+# Update all dependencies
+./deps-update.sh
+
+# Specific updates
+./deps-update.sh --packages fmt,spdlog --upgrade
+./deps-update.sh --update-vcpkg --bootstrap
+</code></pre>
+<p></p>
+<h3>Sanitize Script (`sanitize.sh`)</h3>
+<p></p>
+<p>Runtime analysis with sanitizers.</p>
+<p></p>
+<pre><code>
+# Run all sanitizers
+./sanitize.sh
+
+# Specific sanitizer
+./sanitize.sh --sanitizer address
+./sanitize.sh --asan --verbose
+</code></pre>
+<p></p>
+<p><strong>\1</strong></p>
+<p>- AddressSanitizer (ASan): Memory errors</p>
+<p>- UndefinedBehaviorSanitizer (UBSan): Undefined behavior</p>
+<p>- ThreadSanitizer (TSan): Race conditions</p>
+<p>- MemorySanitizer (MSan): Uninitialized memory</p>
+<p></p>
+<h3>Version Bump Script (`version-bump.sh`)</h3>
+<p></p>
+<p>Project version management.</p>
+<p></p>
+<pre><code>
+# Semantic versioning
+./version-bump.sh patch      # 1.2.3 -> 1.2.4
+./version-bump.sh minor      # 1.2.3 -> 1.3.0
+./version-bump.sh major      # 1.2.3 -> 2.0.0
+
+# Advanced versioning
+./version-bump.sh --version 2.1.0 --changelog --tag
+</code></pre>
+<p></p>
+<h3>CI/CD Scripts</h3>
+<p></p>
+<p><strong>\1</strong></p>
+<pre><code>
+./ci-build.sh --preset ci-linux
+./ci-build.sh --matrix-build --upload-artifacts
+</code></pre>
+<p></p>
+<p><strong>\1</strong></p>
+<pre><code>
+./ci-validate.sh
+./ci-validate.sh --skip-tests --format-check
+</code></pre>
+<p></p>
+<p><strong>\1</strong></p>
+<pre><code>
+./ci-package.sh
+./ci-package.sh --deb --rpm --appimage
+</code></pre>
+<p></p>
+<h3>Platform Compatibility (`platform_compat.sh`)</h3>
+<p></p>
+<p>Cross-platform compatibility layer.</p>
+<p></p>
+<pre><code>
+# Source the library
+source "utils/platform_compat.sh"
+
+# Use compatible functions
+OS_TYPE=$(detect_os_type)
+CPU_CORES=$(get_cpu_cores)
+</code></pre>
+<p></p>
+<p><strong>\1</strong></p>
+<p>- Linux (all major distributions)</p>
+<p>- macOS (Intel and Apple Silicon)</p>
+<p>- Windows (WSL, MSYS2, Cygwin)</p>
+<p>- FreeBSD</p>
+<p></p>
+<h2>🤝 Contributing</h2>
+<p></p>
+<h3>Adding New Scripts</h3>
+<p></p>
+<p>1. Follow existing naming conventions</p>
+<p>2. Include comprehensive help documentation</p>
+<p>3. Add cross-platform compatibility</p>
+<p>4. Integrate with template system</p>
+<p>5. Update documentation</p>
+<p></p>
+<h3>Script Structure Template</h3>
+<p></p>
+<pre><code>
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Source compatibility layer
+source "$(dirname "$0")/utils/platform_compat.sh" 2>/dev/null || true
+
+# Configuration
+SCRIPT_NAME="$(basename "$0")"
+SCRIPT_VERSION="1.0.0"
+
+# Help function
+show_help() {
+    cat << EOF
+Usage: $SCRIPT_NAME [options]
+Description: Brief description
+
+Options:
+    -h, --help          Show help
+    -v, --version       Show version
+EOF
+}
+
+# Main implementation
+main() {
+    # Implementation here
+}
+
+main "$@"
+</code></pre>
+<p></p>
+<h2>📋 Dependencies Graph</h2>
+<p></p>
+<pre><code>
+build.sh ←─── ci-build.sh
+    │
+    └─── test.sh ←─── ci-validate.sh
+              │
+              └─── sanitize.sh
+
+format.sh ←─── ci-validate.sh
+analyze.sh ←─── ci-validate.sh
+
+clean.sh
+cache-clear.sh ←─── deps-update.sh
+deps-update.sh
+version-bump.sh ←─── ci-package.sh
+
+platform_compat.sh ←─── (all scripts)
+</code></pre>
+<p></p>
+<p>---</p>
+<p></p>
+<p>For detailed help on any script, run <code>\1</code>. </p>
+</body></html>

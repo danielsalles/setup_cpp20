@@ -1,0 +1,277 @@
+#include <iostream>
+#include <vector>
+#include <string>
+#include <string_view>
+#include <ranges>
+#include <algorithm>
+#include <optional>
+#include <span>
+
+#ifdef HAS_FMT
+#include <fmt/format.h>
+#include <fmt/ranges.h>
+#endif
+
+#ifdef HAS_SPDLOG
+#include <spdlog/spdlog.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
+#endif
+
+/**
+ * @brief {{ project_description | default("A modern C++20 console application") }}
+ * @author {{ project_author | default("Developer") }}
+ * @version {{ project_version | default("1.0.0") }}
+ */
+
+// Example C++20 concepts
+template<typename T>
+concept Numeric = std::integral<T> || std::floating_point<T>;
+
+template<Numeric T>
+constexpr T square(T value) {
+    return value * value;
+}
+
+// Example function using ranges
+void demonstrate_ranges() {
+    std::vector<int> numbers{1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+    
+#ifdef HAS_FMT
+    fmt::print("🔥 {{ project_name }} - C++20 Features Demo\n");
+    fmt::print("Original numbers: {}\n", numbers);
+#else
+    std::cout << "🔥 {{ project_name }} - C++20 Features Demo\n";
+    std::cout << "Original numbers: ";
+    for (const auto& n : numbers) {
+        std::cout << n << " ";
+    }
+    std::cout << "\n";
+#endif
+    
+    // Use C++20 ranges to filter even numbers and square them
+    auto even_squares = numbers 
+        | std::views::filter([](int n) { return n % 2 == 0; })
+        | std::views::transform(square<int>);
+    
+#ifdef HAS_FMT
+    fmt::print("Even squares: {}\n", std::vector(even_squares.begin(), even_squares.end()));
+#else
+    std::cout << "Even squares: ";
+    for (const auto& n : even_squares) {
+        std::cout << n << " ";
+    }
+    std::cout << "\n";
+#endif
+}
+
+// Example using string_view and structured bindings
+void demonstrate_string_features() {
+    constexpr std::string_view app_name = "{{ project_name }}";
+    constexpr std::string_view version = "{{ project_version | default("1.0.0") }}";
+    
+#ifdef HAS_FMT
+    fmt::print("\n📚 Application Info:\n");
+    fmt::print("  Name: {}\n", app_name);
+    fmt::print("  Version: {}\n", version);
+#else
+    std::cout << "\n📚 Application Info:\n";
+    std::cout << "  Name: " << app_name << "\n";
+    std::cout << "  Version: " << version << "\n";
+#endif
+}
+
+// Example using designated initializers (C++20)
+struct Config {
+    std::string name;
+    int max_items;
+    bool verbose;
+};
+
+void demonstrate_designated_initializers() {
+    // C++20 designated initializers
+    Config config{
+        .name = "{{ project_name }}",
+        .max_items = 100,
+        .verbose = true
+    };
+    
+#ifdef HAS_FMT
+    fmt::print("\n⚙️  Configuration:\n");
+    fmt::print("  Name: {}\n", config.name);
+    fmt::print("  Max Items: {}\n", config.max_items);
+    fmt::print("  Verbose: {}\n", config.verbose ? "Yes" : "No");
+#else
+    std::cout << "\n⚙️  Configuration:\n";
+    std::cout << "  Name: " << config.name << "\n";
+    std::cout << "  Max Items: " << config.max_items << "\n";
+    std::cout << "  Verbose: " << (config.verbose ? "Yes" : "No") << "\n";
+#endif
+}
+
+// Definition for demonstrate_error_handling
+void demonstrate_error_handling() {
+#ifdef HAS_SPDLOG
+    auto logger = spdlog::get("{{ project_name }}"); 
+    // If logger is not found (e.g., spdlog not initialized or project name mismatch), 
+    // it might return nullptr or throw. For robustness, one might check.
+    // However, given the main() initialization, it should generally be available.
+#endif
+
+    // Using std::optional for error handling (C++17/C++20 compatible)
+    auto safe_divide = [](double a, double b) -> std::optional<double> {
+        if (b == 0.0) {
+            return std::nullopt; // Return empty optional for error case
+        }
+        return a / b;
+    };
+
+#ifdef HAS_FMT
+    fmt::print("\n🛡️  Demonstrating Error Handling (std::optional):\n");
+#else
+    std::cout << "\n🛡️  Demonstrating Error Handling (std::optional):\n";
+#endif
+
+    auto result1 = safe_divide(10.0, 2.0);
+    if (result1.has_value()) {
+#ifdef HAS_FMT
+        fmt::print("  10.0 / 2.0 = {}\n", result1.value());
+#else
+        std::cout << "  10.0 / 2.0 = " << result1.value() << "\n";
+#endif
+    } else {
+#ifdef HAS_FMT
+        fmt::print("  Error: Division by zero in 10.0 / 2.0\n");
+#else
+        std::cout << "  Error: Division by zero in 10.0 / 2.0\n";
+#endif
+    }
+
+    auto result2 = safe_divide(5.0, 0.0);
+    if (!result2.has_value()) {
+#ifdef HAS_FMT
+        fmt::print("  5.0 / 0.0 failed: Division by zero detected\n");
+#else
+        std::cout << "  5.0 / 0.0 failed: Division by zero detected\n";
+#endif
+    } else {
+#ifdef HAS_FMT
+        fmt::print("  Unexpected success for 5.0 / 0.0: {}\n", result2.value());
+#else
+        std::cout << "  Unexpected success for 5.0 / 0.0: " << result2.value() << "\n";
+#endif
+    }
+
+    // Demonstrate exception handling as well
+    try {
+        throw std::runtime_error("Demo exception for error handling");
+    } catch (const std::exception& e) {
+#ifdef HAS_FMT
+        fmt::print("  Caught exception: {}\n", e.what());
+#else
+        std::cout << "  Caught exception: " << e.what() << "\n";
+#endif
+    }
+}
+
+// Definition for print_span (helper for demonstrate_span)
+template<typename T, std::size_t N = std::dynamic_extent> // Allow dynamic extent for general use
+void print_span(std::span<T, N> s) { // Removed logger argument for simplicity here, can be added if needed
+#ifdef HAS_FMT
+    fmt::print("    Span (size {}): [", s.size());
+    for (std::size_t i = 0; i < s.size(); ++i) {
+        fmt::print("{}", s[i]);
+        if (i < s.size() - 1) fmt::print(", ");
+    }
+    fmt::print("]\n");
+#else
+    std::cout << "    Span (size " << s.size() << "): [";
+    for (std::size_t i = 0; i < s.size(); ++i) {
+        std::cout << s[i];
+        if (i < s.size() - 1) std::cout << ", ";
+    }
+    std::cout << "]\n";
+#endif
+}
+
+// Definition for demonstrate_span
+void demonstrate_span() {
+#ifdef HAS_FMT
+    fmt::print("\n📏 Demonstrating Span (std::span):\n");
+#else
+    std::cout << "\n📏 Demonstrating Span (std::span):\n";
+#endif
+
+    int arr[] = {1, 2, 3, 4, 5};
+    std::vector<int> vec = {6, 7, 8, 9, 10};
+
+#ifdef HAS_FMT
+    fmt::print("  From C-style array:\n");
+#else
+    std::cout << "  From C-style array:\n";
+#endif
+    print_span(std::span(arr));
+
+#ifdef HAS_FMT
+    fmt::print("  From std::vector:\n");
+#else
+    std::cout << "  From std::vector:\n";
+#endif
+    print_span(std::span(vec));
+
+    // Modifying through span
+    std::span<int> vec_span_modify = vec;
+    if (!vec_span_modify.empty()) {
+        vec_span_modify[0] = 99;
+    }
+#ifdef HAS_FMT
+    fmt::print("  Vector after modification via span: {}\n", vec);
+#else
+    std::cout << "  Vector after modification via span: ";
+    for(const auto& item : vec) std::cout << item << " ";
+    std::cout << "\n";
+#endif
+}
+
+int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
+    // Setup logging if enabled via spdlog
+#ifdef HAS_SPDLOG
+    try {
+        auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+        // You can add more sinks here, like a file sink
+        auto logger = std::make_shared<spdlog::logger>("{{ project_name }}", console_sink);
+        spdlog::register_logger(logger);
+        spdlog::set_default_logger(logger);
+        spdlog::set_level(spdlog::level::debug); // Set global log level
+        spdlog::flush_on(spdlog::level::debug);
+        SPDLOG_INFO("Logging initialized for {{ project_name }}");
+    } catch (const spdlog::spdlog_ex& ex) {
+        std::cerr << "Log initialization failed: " << ex.what() << std::endl;
+    }
+#endif
+
+    // Demonstrate various C++20 features
+    demonstrate_ranges();
+    demonstrate_string_features();
+    demonstrate_designated_initializers();
+    demonstrate_error_handling();
+    demonstrate_span();
+
+    // Demonstrate C++20 module usage
+    // import utils; // Commented out for testing without modules
+    // int original_value = 7;
+    // int doubled_value = MyProjectModules::multiply_by_two(original_value); // Commented out for testing without modules
+    // #ifdef HAS_FMT
+    // fmt::print("\n📦 Using C++20 Module 'utils':\n");
+    // fmt::print("  MyProjectModules::multiply_by_two({}) = {}\n", original_value, doubled_value);
+    // #else
+    // std::cout << "\n📦 Using C++20 Module 'utils':\n";
+    // std::cout << "  MyProjectModules::multiply_by_two(" << original_value << ") = " << doubled_value << "\n";
+    // #endif
+        
+    // #ifdef HAS_FMT
+    // fmt::print("\n🚀 {{ project_name }} execution finished successfully!\n");
+    // #else
+    // std::cout << "\n🚀 {{ project_name }} execution finished successfully!\n";
+    // #endif
+    return 0;
+}

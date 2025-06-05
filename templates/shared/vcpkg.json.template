@@ -1,0 +1,44 @@
+{
+  "name": "{{ project_name | lower | replace('_', '-') }}",
+  "version-string": "{{ project_version | default('1.0.0') }}",
+  "description": "{{ project_description | default('A modern C++20 project') }}",
+  "dependencies": [
+    "catch2"
+    {%- if optional_libraries.fmt -%},
+    "fmt"
+    {%- endif -%}
+    {%- if optional_libraries.spdlog -%},
+    "spdlog"
+    {%- endif -%}
+    {%- if optional_libraries.boost -%},
+    "boost"
+    {%- endif -%}
+    {%- if optional_libraries.openssl -%},
+    "openssl"
+    {%- endif -%}
+  ],
+  "features": {
+    "testing": {
+      "description": "Testing framework with Catch2 (always enabled)",
+      "dependencies": [
+        "catch2"
+      ]
+    }
+    {%- if optional_libraries.fmt -%},
+    "formatting": {
+      "description": "Enable modern formatting with fmt",
+      "dependencies": [
+        "fmt"
+      ]
+    }
+    {%- endif -%}
+    {%- if optional_libraries.spdlog -%},
+    "logging": {
+      "description": "Enable logging with spdlog",
+      "dependencies": [
+        "spdlog"
+      ]
+    }
+    {%- endif -%}
+  }
+} 

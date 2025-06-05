@@ -1,0 +1,1068 @@
+#!/bin/bash
+
+# {{ project_name }} Test Script
+# Comprehensive testing for C++20 projects with enhanced reporting and framework support
+
+set -euo pipefail
+
+# Script configuration
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+readonly BUILD_DIR="${PROJECT_ROOT}/build"
+
+# Source platform compatibility layer if available
+if [[ -f "${SCRIPT_DIR}/utils/platform_compat.sh" ]]; then
+    source "${SCRIPT_DIR}/utils/platform_compat.sh"
+fi
+
+# Colors for output (fallback if platform_compat.sh not available)
+if [[ -z "${COLOR_RED:-}" ]]; then
+    readonly RED='\033[0;31m'
+    readonly GREEN='\033[0;32m'
+    readonly YELLOW='\033[1;33m'
+    readonly BLUE='\033[0;34m'
+    readonly PURPLE='\033[0;35m'
+    readonly CYAN='\033[0;36m'
+    readonly BOLD='\033[1m'
+    readonly NC='\033[0m'
+else
+    readonly RED="${COLOR_RED}"
+    readonly GREEN="${COLOR_GREEN}"
+    readonly YELLOW="${COLOR_YELLOW}"
+    readonly BLUE="${COLOR_BLUE}"
+    readonly PURPLE="${COLOR_MAGENTA}"
+    readonly CYAN="${COLOR_CYAN}"
+    readonly BOLD="${COLOR_BOLD}"
+    readonly NC="${COLOR_RESET}"
+fi
+
+# Logging functions (fallback if platform_compat.sh not available)
+if ! command -v log_info >/dev/null 2>&1; then
+    log_info() {
+        echo -e "${BLUE}ℹ️  [INFO]${NC} $*"
+    }
+    
+    log_success() {
+        echo -e "${GREEN}✅ [SUCCESS]${NC} $*"
+    }
+    
+    log_warning() {
+        echo -e "${YELLOW}⚠️  [WARNING]${NC} $*"
+    }
+    
+    log_error() {
+        echo -e "${RED}❌ [ERROR]${NC} $*" >&2
+    }
+fi
+
+log_debug() {
+    if [[ "${VERBOSE:-false}" == true ]]; then
+        echo -e "${PURPLE}🔍 [DEBUG]${NC} $*"
+    fi
+}
+
+# Print usage information
+print_usage() {
+    cat << EOF
+Usage: $0 [OPTIONS]
+
+Test runner for {{ project_name }}
+
+OPTIONS:
+    -t, --type TYPE         Build type for testing: Debug, Release, RelWithDebInfo (default: Debug)
+    -c, --coverage          Generate coverage report with HTML output (Debug builds only)
+    -v, --verbose           Enable verbose test output
+    -f, --filter PATTERN    Run only tests matching pattern (regex)
+    -j, --jobs JOBS         Number of parallel test jobs (default: auto-detect)
+    -r, --repeat COUNT      Repeat tests COUNT times (default: 1)
+    -s, --sanitizers        Run tests with sanitizers (Debug builds only)
+    --valgrind              Run tests under Valgrind memory checker
+    --benchmark             Run benchmark tests
+    --no-build              Don't build before testing
+    --xml                   Generate XML test reports (JUnit format)
+    --json                  Generate JSON test reports
+    --html                  Generate HTML test report
+    --framework FRAMEWORK   Test framework: catch2, gtest, ctest (default: auto-detect)
+    --output-dir DIR        Output directory for reports (default: build/test-results)
+    --timeout SECONDS       Test timeout in seconds (default: 300)
+    --shuffle               Shuffle test execution order
+    --list-tests            List all available tests
+    --test-suite SUITE      Run specific test suite
+    --fail-fast             Stop on first test failure
+    --gcovr                 Use gcovr for coverage instead of lcov
+    -h, --help              Show this help message
+
+EXAMPLES:
+    $0                              # Run all tests (Debug build)
+    $0 -t Release -v                # Run tests in Release mode with verbose output
+    $0 -c --xml --html              # Run with coverage and generate XML/HTML reports
+    $0 -f "Calculator*" -r 3        # Run Calculator tests 3 times
+    $0 --valgrind --timeout 600     # Run tests under Valgrind with 10min timeout
+    $0 --benchmark --json           # Run benchmarks and output JSON results
+    $0 --list-tests                 # List all available tests
+    $0 --test-suite unit --shuffle  # Run unit test suite with shuffled order
+
+REPORT FORMATS:
+    XML:  JUnit-compatible XML for CI integration
+    JSON: Machine-readable test results
+    HTML: Human-readable test report with charts
+    Coverage: HTML coverage report with line-by-line analysis
+
+EOF
+}
+
+# Default values
+BUILD_TYPE="Debug"
+ENABLE_COVERAGE=false
+VERBOSE=false
+TEST_FILTER=""
+JOBS=$(if command -v get_cpu_cores >/dev/null 2>&1; then get_cpu_cores; else nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo "4"; fi)
+REPEAT_COUNT=1
+ENABLE_SANITIZERS=false
+USE_VALGRIND=false
+RUN_BENCHMARKS=false
+NO_BUILD=false
+GENERATE_XML=false
+GENERATE_JSON=false
+GENERATE_HTML=false
+TEST_FRAMEWORK="auto"
+OUTPUT_DIR=""
+TEST_TIMEOUT=300
+SHUFFLE_TESTS=false
+LIST_TESTS=false
+TEST_SUITE=""
+FAIL_FAST=false
+USE_GCOVR=false
+
+# Report file paths
+TEST_RESULTS_DIR=""
+XML_REPORT=""
+JSON_REPORT=""
+HTML_REPORT=""
+COVERAGE_REPORT=""
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -t|--type)
+            BUILD_TYPE="$2"
+            shift 2
+            ;;
+        -c|--coverage)
+            ENABLE_COVERAGE=true
+            shift
+            ;;
+        -v|--verbose)
+            VERBOSE=true
+            shift
+            ;;
+        -f|--filter)
+            TEST_FILTER="$2"
+            shift 2
+            ;;
+        -j|--jobs)
+            JOBS="$2"
+            shift 2
+            ;;
+        -r|--repeat)
+            REPEAT_COUNT="$2"
+            shift 2
+            ;;
+        -s|--sanitizers)
+            ENABLE_SANITIZERS=true
+            shift
+            ;;
+        --valgrind)
+            USE_VALGRIND=true
+            shift
+            ;;
+        --benchmark)
+            RUN_BENCHMARKS=true
+            shift
+            ;;
+        --no-build)
+            NO_BUILD=true
+            shift
+            ;;
+        --xml)
+            GENERATE_XML=true
+            shift
+            ;;
+        --json)
+            GENERATE_JSON=true
+            shift
+            ;;
+        --html)
+            GENERATE_HTML=true
+            shift
+            ;;
+        --framework)
+            TEST_FRAMEWORK="$2"
+            shift 2
+            ;;
+        --output-dir)
+            OUTPUT_DIR="$2"
+            shift 2
+            ;;
+        --timeout)
+            TEST_TIMEOUT="$2"
+            shift 2
+            ;;
+        --shuffle)
+            SHUFFLE_TESTS=true
+            shift
+            ;;
+        --list-tests)
+            LIST_TESTS=true
+            shift
+            ;;
+        --test-suite)
+            TEST_SUITE="$2"
+            shift 2
+            ;;
+        --fail-fast)
+            FAIL_FAST=true
+            shift
+            ;;
+        --gcovr)
+            USE_GCOVR=true
+            shift
+            ;;
+        -h|--help)
+            print_usage
+            exit 0
+            ;;
+        *)
+            log_error "Unknown option: $1"
+            print_usage
+            exit 1
+            ;;
+    esac
+done
+
+# Validate build type
+case "$BUILD_TYPE" in
+    Debug|Release|RelWithDebInfo)
+        ;;
+    *)
+        log_error "Invalid build type: $BUILD_TYPE (only Debug, Release, and RelWithDebInfo supported for testing)"
+        exit 1
+        ;;
+esac
+
+# Setup output directories
+if [[ -z "$OUTPUT_DIR" ]]; then
+    OUTPUT_DIR="${BUILD_DIR}/test-results"
+fi
+TEST_RESULTS_DIR="$OUTPUT_DIR"
+mkdir -p "$TEST_RESULTS_DIR"
+
+# Setup report file paths
+XML_REPORT="${TEST_RESULTS_DIR}/test-results.xml"
+JSON_REPORT="${TEST_RESULTS_DIR}/test-results.json"
+HTML_REPORT="${TEST_RESULTS_DIR}/test-report.html"
+COVERAGE_REPORT="${TEST_RESULTS_DIR}/coverage"
+
+# Check if tools are available
+check_requirements() {
+    local missing_tools=()
+    
+    command -v cmake >/dev/null 2>&1 || missing_tools+=("cmake")
+    
+    if [[ "$USE_VALGRIND" == true ]]; then
+        command -v valgrind >/dev/null 2>&1 || {
+            log_warning "Valgrind not found, disabling Valgrind tests"
+            USE_VALGRIND=false
+        }
+    fi
+    
+    if [[ "$ENABLE_COVERAGE" == true ]]; then
+        if [[ "$USE_GCOVR" == true ]]; then
+            command -v gcovr >/dev/null 2>&1 || {
+                log_warning "gcovr not found, falling back to lcov"
+                USE_GCOVR=false
+            }
+        fi
+        
+        if [[ "$USE_GCOVR" == false ]]; then
+            command -v gcov >/dev/null 2>&1 || {
+                log_warning "gcov not found, disabling coverage"
+                ENABLE_COVERAGE=false
+            }
+            command -v lcov >/dev/null 2>&1 || {
+                log_warning "lcov not found, trying gcovr"
+                if command -v gcovr >/dev/null 2>&1; then
+                    USE_GCOVR=true
+                else
+                    log_warning "Neither lcov nor gcovr found, coverage will be limited"
+                fi
+            }
+        fi
+    fi
+    
+    # Check for XML/JSON report tools
+    if [[ "$GENERATE_XML" == true ]] || [[ "$GENERATE_JSON" == true ]]; then
+        if ! command -v python3 >/dev/null 2>&1 && ! command -v python >/dev/null 2>&1; then
+            log_warning "Python not found, XML/JSON reports may be limited"
+        fi
+    fi
+    
+    if [[ ${#missing_tools[@]} -ne 0 ]]; then
+        log_error "Missing required tools: ${missing_tools[*]}"
+        exit 1
+    fi
+}
+
+# Detect test framework
+detect_test_framework() {
+    if [[ "$TEST_FRAMEWORK" != "auto" ]]; then
+        return
+    fi
+    
+    log_debug "Auto-detecting test framework..."
+    
+    # Check CMakeLists.txt for framework hints
+    if [[ -f "${PROJECT_ROOT}/CMakeLists.txt" ]]; then
+        if grep -q "Catch2" "${PROJECT_ROOT}/CMakeLists.txt"; then
+            TEST_FRAMEWORK="catch2"
+            log_debug "Detected Catch2 framework"
+        elif grep -q "GTest\|googletest" "${PROJECT_ROOT}/CMakeLists.txt"; then
+            TEST_FRAMEWORK="gtest"
+            log_debug "Detected Google Test framework"
+        fi
+    fi
+    
+    # Default to ctest if no specific framework detected
+    if [[ "$TEST_FRAMEWORK" == "auto" ]]; then
+        TEST_FRAMEWORK="ctest"
+        log_debug "Using default CTest framework"
+    fi
+}
+
+# Build the project if needed
+build_project() {
+    if [[ "$NO_BUILD" == true ]]; then
+        log_info "Skipping build as requested"
+        return
+    fi
+    
+    log_info "Building {{ project_name }} for testing ($BUILD_TYPE)..."
+    
+    local build_args=(
+        -t "$BUILD_TYPE"
+        -T  # Enable tests
+        -j "$JOBS"
+    )
+    
+    # Add sanitizers for Debug builds
+    if [[ "$ENABLE_SANITIZERS" == true ]] && [[ "$BUILD_TYPE" == "Debug" ]]; then
+        build_args+=(-s)
+    fi
+    
+    # Enable coverage for Debug builds
+    if [[ "$ENABLE_COVERAGE" == true ]] && [[ "$BUILD_TYPE" == "Debug" ]]; then
+        build_args+=(--coverage)
+    fi
+    
+    if [[ "$VERBOSE" == true ]]; then
+        build_args+=(-v)
+    fi
+    
+    # Call the build script
+    "$SCRIPT_DIR/build.sh" "${build_args[@]}"
+}
+
+# List available tests
+list_available_tests() {
+    if [[ "$LIST_TESTS" != true ]]; then
+        return
+    fi
+    
+    log_info "Available tests:"
+    cd "$BUILD_DIR"
+    
+    case "$TEST_FRAMEWORK" in
+        catch2)
+            # Find Catch2 test executables and list tests
+            find . -name "*test*" -type f -executable | while read -r test_exe; do
+                if "$test_exe" --list-tests 2>/dev/null; then
+                    echo ""
+                fi
+            done
+            ;;
+        gtest)
+            # Find Google Test executables and list tests
+            find . -name "*test*" -type f -executable | while read -r test_exe; do
+                if "$test_exe" --gtest_list_tests 2>/dev/null; then
+                    echo ""
+                fi
+            done
+            ;;
+        *)
+            # Use ctest to list tests
+            ctest -N | grep "Test #" | sed 's/Test #[0-9]*: //'
+            ;;
+    esac
+    
+    exit 0
+}
+
+# Run unit tests
+run_unit_tests() {
+    log_info "Running unit tests with $TEST_FRAMEWORK..."
+    
+    if [[ ! -d "$BUILD_DIR" ]]; then
+        log_error "Build directory not found: $BUILD_DIR"
+        log_info "Please build the project first"
+        exit 1
+    fi
+    
+    cd "$BUILD_DIR"
+    
+    local test_failed=false
+    local total_tests=0
+    local passed_tests=0
+    local failed_tests=0
+    local test_output=""
+    
+    case "$TEST_FRAMEWORK" in
+        catch2)
+            run_catch2_tests
+            ;;
+        gtest)
+            run_gtest_tests
+            ;;
+        *)
+            run_ctest_tests
+            ;;
+    esac
+    
+    # Generate test summary
+    generate_test_summary
+}
+
+# Run tests with CTest
+run_ctest_tests() {
+    local ctest_args=(
+        --output-on-failure
+        -j "$JOBS"
+        --timeout "$TEST_TIMEOUT"
+    )
+    
+    # Add test filter if specified
+    if [[ -n "$TEST_FILTER" ]]; then
+        ctest_args+=(-R "$TEST_FILTER")
+    fi
+    
+    # Add test suite filter
+    if [[ -n "$TEST_SUITE" ]]; then
+        ctest_args+=(-L "$TEST_SUITE")
+    fi
+    
+    # Verbose output
+    if [[ "$VERBOSE" == true ]]; then
+        ctest_args+=(-V)
+    fi
+    
+    # Shuffle tests
+    if [[ "$SHUFFLE_TESTS" == true ]]; then
+        ctest_args+=(--schedule-random)
+    fi
+    
+    # Stop on failure
+    if [[ "$FAIL_FAST" == true ]]; then
+        ctest_args+=(--stop-on-failure)
+    fi
+    
+    # Generate XML output if requested
+    if [[ "$GENERATE_XML" == true ]]; then
+        ctest_args+=(--output-junit "$XML_REPORT")
+    fi
+    
+    # Run tests multiple times if requested
+    for ((i=1; i<=REPEAT_COUNT; i++)); do
+        if [[ "$REPEAT_COUNT" -gt 1 ]]; then
+            log_info "Test run $i of $REPEAT_COUNT"
+        fi
+        
+        local test_log="${TEST_RESULTS_DIR}/ctest-run-${i}.log"
+        
+        if ctest "${ctest_args[@]}" 2>&1 | tee "$test_log"; then
+            log_success "Unit tests passed (run $i)"
+            passed_tests=$((passed_tests + 1))
+        else
+            log_error "Unit tests failed (run $i)"
+            failed_tests=$((failed_tests + 1))
+            if [[ "$FAIL_FAST" == true ]]; then
+                test_failed=true
+                break
+            fi
+        fi
+        
+        # Extract test counts from log
+        total_tests=$(grep -E "[0-9]+ tests? from [0-9]+ test cases?" "$test_log" | awk '{print $1}' | tail -1 || echo "0")
+    done
+    
+    if [[ "$failed_tests" -gt 0 ]]; then
+        test_failed=true
+    fi
+}
+
+# Run tests with Catch2
+run_catch2_tests() {
+    log_debug "Running Catch2 tests..."
+    
+    # Find Catch2 test executables
+    local test_executables=()
+    while IFS= read -r -d '' test_exe; do
+        test_executables+=("$test_exe")
+    done < <(find . -name "*test*" -type f -executable -print0)
+    
+    for test_exe in "${test_executables[@]}"; do
+        local catch_args=()
+        
+        # Add test filter
+        if [[ -n "$TEST_FILTER" ]]; then
+            catch_args+=("$TEST_FILTER")
+        fi
+        
+        # Verbose output
+        if [[ "$VERBOSE" == true ]]; then
+            catch_args+=(--success)
+        fi
+        
+        # Shuffle tests
+        if [[ "$SHUFFLE_TESTS" == true ]]; then
+            catch_args+=(--order rand)
+        fi
+        
+        # Output formats
+        if [[ "$GENERATE_XML" == true ]]; then
+            catch_args+=(--reporter junit --out "${test_exe##*/}-junit.xml")
+        fi
+        
+        # Run test
+        log_info "Running: $test_exe"
+        if ! "$test_exe" "${catch_args[@]}"; then
+            test_failed=true
+            failed_tests=$((failed_tests + 1))
+            if [[ "$FAIL_FAST" == true ]]; then
+                break
+            fi
+        else
+            passed_tests=$((passed_tests + 1))
+        fi
+    done
+}
+
+# Run tests with Google Test
+run_gtest_tests() {
+    log_debug "Running Google Test tests..."
+    
+    # Find GTest executables
+    local test_executables=()
+    while IFS= read -r -d '' test_exe; do
+        test_executables+=("$test_exe")
+    done < <(find . -name "*test*" -type f -executable -print0)
+    
+    for test_exe in "${test_executables[@]}"; do
+        local gtest_args=()
+        
+        # Add test filter
+        if [[ -n "$TEST_FILTER" ]]; then
+            gtest_args+=("--gtest_filter=$TEST_FILTER")
+        fi
+        
+        # Verbose output
+        if [[ "$VERBOSE" == true ]]; then
+            gtest_args+=(--gtest_print_time=1)
+        fi
+        
+        # Shuffle tests
+        if [[ "$SHUFFLE_TESTS" == true ]]; then
+            gtest_args+=(--gtest_shuffle)
+        fi
+        
+        # Output formats
+        if [[ "$GENERATE_XML" == true ]]; then
+            gtest_args+=("--gtest_output=xml:${test_exe##*/}-gtest.xml")
+        fi
+        
+        # Run test
+        log_info "Running: $test_exe"
+        if ! "$test_exe" "${gtest_args[@]}"; then
+            test_failed=true
+            failed_tests=$((failed_tests + 1))
+            if [[ "$FAIL_FAST" == true ]]; then
+                break
+            fi
+        else
+            passed_tests=$((passed_tests + 1))
+        fi
+    done
+}
+
+# Run tests with Valgrind
+run_valgrind_tests() {
+    if [[ "$USE_VALGRIND" != true ]]; then
+        return
+    fi
+    
+    log_info "Running tests with Valgrind..."
+    
+    cd "$BUILD_DIR"
+    
+    # Find test executables
+    local test_executables=()
+    while IFS= read -r -d '' test_exe; do
+        test_executables+=("$test_exe")
+    done < <(find . -name "*test*" -type f -executable -print0)
+    
+    if [[ ${#test_executables[@]} -eq 0 ]]; then
+        log_warning "No test executables found for Valgrind analysis"
+        return
+    fi
+    
+    local valgrind_failed=false
+    for test_exe in "${test_executables[@]}"; do
+        log_info "Running Valgrind on $test_exe"
+        
+        if ! valgrind \
+            --tool=memcheck \
+            --leak-check=full \
+            --show-leak-kinds=all \
+            --track-origins=yes \
+            --error-exitcode=1 \
+            --suppressions=/dev/null \
+            "$test_exe"; then
+            log_error "Valgrind detected issues in $test_exe"
+            valgrind_failed=true
+        fi
+    done
+    
+    if [[ "$valgrind_failed" == true ]]; then
+        log_error "Valgrind tests failed"
+        exit 1
+    else
+        log_success "All Valgrind tests passed"
+    fi
+}
+
+# Generate coverage report
+generate_coverage() {
+    if [[ "$ENABLE_COVERAGE" != true ]] || [[ "$BUILD_TYPE" != "Debug" ]]; then
+        return
+    fi
+    
+    log_info "Generating coverage report..."
+    
+    cd "$BUILD_DIR"
+    
+    # Check if we have gcov files
+    if ! find . -name "*.gcda" 2>/dev/null | grep -q .; then
+        log_warning "No coverage data found. Make sure the project was built with coverage enabled."
+        return
+    fi
+    
+    # Create coverage directory
+    mkdir -p "$COVERAGE_REPORT"
+    
+    if [[ "$USE_GCOVR" == true ]] && command -v gcovr >/dev/null 2>&1; then
+        # Use gcovr for coverage
+        log_info "Using gcovr for coverage analysis..."
+        
+        local gcovr_args=(
+            --root "${PROJECT_ROOT}"
+            --exclude '.*test.*'
+            --exclude '.*/tests/.*'
+            --exclude '.*/third_party/.*'
+            --exclude '.*/external/.*'
+            --exclude '.*/build/.*'
+            --print-summary
+        )
+        
+        # Generate HTML report
+        gcovr "${gcovr_args[@]}" \
+            --html --html-details \
+            --output "${COVERAGE_REPORT}/index.html" \
+            2>&1 | tee "${COVERAGE_REPORT}/gcovr.log"
+        
+        # Generate XML report for CI
+        if [[ "$GENERATE_XML" == true ]]; then
+            gcovr "${gcovr_args[@]}" \
+                --xml \
+                --output "${COVERAGE_REPORT}/coverage.xml"
+        fi
+        
+        # Generate JSON report
+        if [[ "$GENERATE_JSON" == true ]]; then
+            gcovr "${gcovr_args[@]}" \
+                --json \
+                --output "${COVERAGE_REPORT}/coverage.json"
+        fi
+        
+        log_success "Coverage report generated with gcovr"
+        
+    elif command -v lcov >/dev/null 2>&1; then
+        # Use lcov for coverage
+        log_info "Using lcov for coverage analysis..."
+        
+        # Capture coverage data
+        lcov --capture \
+            --directory . \
+            --output-file "${COVERAGE_REPORT}/coverage.info" \
+            --quiet
+        
+        # Remove unwanted files
+        lcov --remove "${COVERAGE_REPORT}/coverage.info" \
+            '/usr/*' \
+            '*/test/*' \
+            '*_test.cpp' \
+            '*/tests/*' \
+            '*/third_party/*' \
+            '*/external/*' \
+            '*/build/*' \
+            --output-file "${COVERAGE_REPORT}/coverage.info" \
+            --quiet
+        
+        # Generate HTML report if genhtml is available
+        if command -v genhtml >/dev/null 2>&1; then
+            genhtml "${COVERAGE_REPORT}/coverage.info" \
+                --output-directory "${COVERAGE_REPORT}/html" \
+                --title "{{ project_name }} Test Coverage" \
+                --legend \
+                --show-details \
+                --highlight \
+                --quiet
+            
+            # Create summary page
+            create_coverage_summary
+            
+            log_success "Coverage report generated with lcov"
+        else
+            log_info "Coverage data collected in ${COVERAGE_REPORT}/coverage.info"
+        fi
+        
+        # Generate Cobertura XML if requested
+        if [[ "$GENERATE_XML" == true ]] && command -v lcov_cobertura >/dev/null 2>&1; then
+            lcov_cobertura "${COVERAGE_REPORT}/coverage.info" \
+                --output "${COVERAGE_REPORT}/coverage.xml"
+        fi
+        
+    else
+        # Basic gcov report
+        log_info "Using basic gcov for coverage..."
+        find . -name "*.gcda" -exec gcov -r {} \; > "${COVERAGE_REPORT}/gcov.log" 2>&1
+        mv *.gcov "${COVERAGE_REPORT}/" 2>/dev/null || true
+        log_info "Coverage files generated with gcov in ${COVERAGE_REPORT}"
+    fi
+    
+    # Calculate and display coverage percentage
+    calculate_coverage_percentage
+}
+
+# Create coverage summary
+create_coverage_summary() {
+    local summary_file="${COVERAGE_REPORT}/summary.txt"
+    
+    if [[ -f "${COVERAGE_REPORT}/coverage.info" ]]; then
+        lcov --summary "${COVERAGE_REPORT}/coverage.info" > "$summary_file" 2>&1
+        
+        # Extract key metrics
+        local line_coverage=$(grep -oP 'lines......: \K[0-9.]+' "$summary_file" || echo "0")
+        local func_coverage=$(grep -oP 'functions..: \K[0-9.]+' "$summary_file" || echo "0")
+        local branch_coverage=$(grep -oP 'branches...: \K[0-9.]+' "$summary_file" || echo "0")
+        
+        log_info "Coverage Summary:"
+        log_info "  Lines:     ${line_coverage}%"
+        log_info "  Functions: ${func_coverage}%"
+        log_info "  Branches:  ${branch_coverage}%"
+    fi
+}
+
+# Calculate coverage percentage
+calculate_coverage_percentage() {
+    local coverage_file=""
+    
+    if [[ -f "${COVERAGE_REPORT}/coverage.json" ]]; then
+        coverage_file="${COVERAGE_REPORT}/coverage.json"
+        # Extract line coverage from JSON using Python if available
+        if command -v python3 >/dev/null 2>&1 || command -v python >/dev/null 2>&1; then
+            local python_cmd=$(command -v python3 || command -v python)
+            local line_coverage=$(
+                "$python_cmd" -c "
+import json
+with open('$coverage_file') as f:
+    data = json.load(f)
+    print(f\"{data.get('line_percent', 0):.1f}\")
+" 2>/dev/null || echo "0"
+            )
+            log_info "Overall line coverage: ${line_coverage}%"
+        fi
+    elif [[ -f "${COVERAGE_REPORT}/summary.txt" ]]; then
+        # Already displayed in create_coverage_summary
+        :
+    fi
+}
+
+# Run benchmarks
+run_benchmarks() {
+    if [[ "$RUN_BENCHMARKS" != true ]]; then
+        return
+    fi
+    
+    log_info "Running benchmarks..."
+    
+    cd "$BUILD_DIR"
+    
+    # Find benchmark executables
+    local benchmark_executables=()
+    while IFS= read -r -d '' bench_exe; do
+        benchmark_executables+=("$bench_exe")
+    done < <(find . -name "*benchmark*" -o -name "*bench*" -type f -executable -print0)
+    
+    if [[ ${#benchmark_executables[@]} -eq 0 ]]; then
+        log_warning "No benchmark executables found"
+        return
+    fi
+    
+    for bench_exe in "${benchmark_executables[@]}"; do
+        log_info "Running benchmark: $bench_exe"
+        "$bench_exe" || log_warning "Benchmark $bench_exe failed"
+    done
+    
+    log_success "Benchmarks completed"
+}
+
+# Generate test summary
+generate_test_summary() {
+    local summary_file="${TEST_RESULTS_DIR}/test-summary.txt"
+    
+    {
+        echo "Test Execution Summary"
+        echo "====================="
+        echo "Date: $(date)"
+        echo "Project: {{ project_name }}"
+        echo "Build Type: $BUILD_TYPE"
+        echo "Test Framework: $TEST_FRAMEWORK"
+        echo ""
+        echo "Results:"
+        echo "  Total Runs: $REPEAT_COUNT"
+        echo "  Passed: $passed_tests"
+        echo "  Failed: $failed_tests"
+        echo ""
+        echo "Configuration:"
+        echo "  Test Filter: ${TEST_FILTER:-All tests}"
+        echo "  Test Suite: ${TEST_SUITE:-All suites}"
+        echo "  Parallel Jobs: $JOBS"
+        echo "  Timeout: ${TEST_TIMEOUT}s"
+        echo "  Shuffle: $SHUFFLE_TESTS"
+        echo "  Fail Fast: $FAIL_FAST"
+    } | tee "$summary_file"
+    
+    if [[ "$test_failed" == true ]]; then
+        echo "" | tee -a "$summary_file"
+        echo "STATUS: FAILED" | tee -a "$summary_file"
+    else
+        echo "" | tee -a "$summary_file"
+        echo "STATUS: PASSED" | tee -a "$summary_file"
+    fi
+}
+
+# Generate HTML report
+generate_html_report() {
+    if [[ "$GENERATE_HTML" != true ]]; then
+        return
+    fi
+    
+    log_info "Generating HTML test report..."
+    
+    cat > "$HTML_REPORT" << 'EOF'
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ project_name }} Test Report</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .header { background-color: #f0f0f0; padding: 20px; border-radius: 5px; }
+        .summary { margin: 20px 0; }
+        .passed { color: green; font-weight: bold; }
+        .failed { color: red; font-weight: bold; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .test-passed { background-color: #d4edda; }
+        .test-failed { background-color: #f8d7da; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>{{ project_name }} Test Report</h1>
+        <p>Generated: <script>document.write(new Date().toLocaleString());</script></p>
+    </div>
+    
+    <div class="summary">
+        <h2>Summary</h2>
+        <p>Build Type: <strong>BUILD_TYPE_PLACEHOLDER</strong></p>
+        <p>Test Framework: <strong>FRAMEWORK_PLACEHOLDER</strong></p>
+        <p>Total Tests: <strong>TOTAL_PLACEHOLDER</strong></p>
+        <p>Passed: <span class="passed">PASSED_PLACEHOLDER</span></p>
+        <p>Failed: <span class="failed">FAILED_PLACEHOLDER</span></p>
+        <p>Success Rate: <strong>RATE_PLACEHOLDER%</strong></p>
+    </div>
+    
+    <div class="details">
+        <h2>Test Details</h2>
+        <table>
+            <tr>
+                <th>Test Suite</th>
+                <th>Test Name</th>
+                <th>Status</th>
+                <th>Duration</th>
+            </tr>
+            <!-- Test results will be inserted here -->
+        </table>
+    </div>
+    
+    <div class="coverage" id="coverage-section" style="display: none;">
+        <h2>Code Coverage</h2>
+        <p>Line Coverage: <strong id="line-coverage">N/A</strong></p>
+        <p>Function Coverage: <strong id="func-coverage">N/A</strong></p>
+        <p>Branch Coverage: <strong id="branch-coverage">N/A</strong></p>
+        <p><a href="../coverage/index.html">View Detailed Coverage Report</a></p>
+    </div>
+</body>
+</html>
+EOF
+    
+    # Replace placeholders
+    sed -i.bak "s/BUILD_TYPE_PLACEHOLDER/$BUILD_TYPE/g" "$HTML_REPORT"
+    sed -i.bak "s/FRAMEWORK_PLACEHOLDER/$TEST_FRAMEWORK/g" "$HTML_REPORT"
+    sed -i.bak "s/TOTAL_PLACEHOLDER/$((passed_tests + failed_tests))/g" "$HTML_REPORT"
+    sed -i.bak "s/PASSED_PLACEHOLDER/$passed_tests/g" "$HTML_REPORT"
+    sed -i.bak "s/FAILED_PLACEHOLDER/$failed_tests/g" "$HTML_REPORT"
+    
+    local success_rate=0
+    if [[ $((passed_tests + failed_tests)) -gt 0 ]]; then
+        success_rate=$((passed_tests * 100 / (passed_tests + failed_tests)))
+    fi
+    sed -i.bak "s/RATE_PLACEHOLDER/$success_rate/g" "$HTML_REPORT"
+    rm -f "${HTML_REPORT}.bak"
+    
+    log_success "HTML report generated: $HTML_REPORT"
+}
+
+# Generate JSON report
+generate_json_report() {
+    if [[ "$GENERATE_JSON" != true ]]; then
+        return
+    fi
+    
+    log_info "Generating JSON test report..."
+    
+    cat > "$JSON_REPORT" << EOF
+{
+    "project": "{{ project_name }}",
+    "timestamp": "$(date -Iseconds)",
+    "build_type": "$BUILD_TYPE",
+    "test_framework": "$TEST_FRAMEWORK",
+    "configuration": {
+        "filter": "${TEST_FILTER:-}",
+        "suite": "${TEST_SUITE:-}",
+        "jobs": $JOBS,
+        "timeout": $TEST_TIMEOUT,
+        "shuffle": $SHUFFLE_TESTS,
+        "fail_fast": $FAIL_FAST
+    },
+    "summary": {
+        "total_runs": $REPEAT_COUNT,
+        "passed": $passed_tests,
+        "failed": $failed_tests,
+        "success_rate": $success_rate
+    },
+    "coverage": {
+        "enabled": $ENABLE_COVERAGE,
+        "report_path": "${COVERAGE_REPORT}/index.html"
+    }
+}
+EOF
+    
+    log_success "JSON report generated: $JSON_REPORT"
+}
+
+# Print test summary
+print_summary() {
+    log_info "Test Configuration:"
+    echo "  Project: {{ project_name }}"
+    echo "  Build Type: $BUILD_TYPE"
+    echo "  Test Framework: $TEST_FRAMEWORK"
+    echo "  Test Filter: ${TEST_FILTER:-All tests}"
+    echo "  Test Suite: ${TEST_SUITE:-All suites}"
+    echo "  Repeat Count: $REPEAT_COUNT"
+    echo "  Parallel Jobs: $JOBS"
+    echo "  Timeout: ${TEST_TIMEOUT}s"
+    echo "  Coverage: $([ "$ENABLE_COVERAGE" == true ] && [ "$BUILD_TYPE" == "Debug" ] && echo "Enabled ($([ "$USE_GCOVR" == true ] && echo "gcovr" || echo "lcov"))" || echo "Disabled")"
+    echo "  Sanitizers: $([ "$ENABLE_SANITIZERS" == true ] && [ "$BUILD_TYPE" == "Debug" ] && echo "Enabled" || echo "Disabled")"
+    echo "  Valgrind: $([ "$USE_VALGRIND" == true ] && echo "Enabled" || echo "Disabled")"
+    echo "  Benchmarks: $([ "$RUN_BENCHMARKS" == true ] && echo "Enabled" || echo "Disabled")"
+    echo "  Reports: $([ "$GENERATE_XML" == true ] && echo "XML ")$([ "$GENERATE_JSON" == true ] && echo "JSON ")$([ "$GENERATE_HTML" == true ] && echo "HTML")"
+    echo "  Output Directory: $TEST_RESULTS_DIR"
+}
+
+# Main execution
+main() {
+    log_info "Starting {{ project_name }} test suite..."
+    
+    detect_test_framework
+    print_summary
+    echo
+    
+    check_requirements
+    
+    # List tests and exit if requested
+    list_available_tests
+    
+    build_project
+    run_unit_tests
+    
+    # Exit early if tests failed and not continuing
+    if [[ "$test_failed" == true ]]; then
+        generate_html_report
+        generate_json_report
+        log_error "{{ project_name }} test suite failed!"
+        exit 1
+    fi
+    
+    run_valgrind_tests
+    generate_coverage
+    run_benchmarks
+    
+    # Generate final reports
+    generate_html_report
+    generate_json_report
+    
+    log_success "{{ project_name }} test suite completed successfully!"
+    
+    # Print report locations
+    echo ""
+    log_info "Test Results:"
+    if [[ -f "$XML_REPORT" ]]; then
+        log_info "  XML Report: $XML_REPORT"
+    fi
+    if [[ -f "$JSON_REPORT" ]]; then
+        log_info "  JSON Report: $JSON_REPORT"
+    fi
+    if [[ -f "$HTML_REPORT" ]]; then
+        log_info "  HTML Report: $HTML_REPORT"
+    fi
+    if [[ "$ENABLE_COVERAGE" == true ]]; then
+        if [[ -f "${COVERAGE_REPORT}/index.html" ]]; then
+            log_info "  Coverage Report: ${COVERAGE_REPORT}/index.html"
+        elif [[ -f "${COVERAGE_REPORT}/html/index.html" ]]; then
+            log_info "  Coverage Report: ${COVERAGE_REPORT}/html/index.html"
+        fi
+    fi
+}
+
+# Run main function
+main "$@" 

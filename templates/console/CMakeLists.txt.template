@@ -1,0 +1,126 @@
+cmake_minimum_required(VERSION 3.20)
+
+# Enable C++20 module scanning (requires CMake 3.28+ ideally, but try with older versions)
+# For Clang, this helps with dependency discovery for modules.
+# Must be set before project() for some CMake versions/generators to take full effect.
+# set(CMAKE_CXX_SCAN_FOR_MODULES ON) # Temporarily disabled to avoid issues with FindThreads.cmake on CMake 3.20 + AppleClang
+
+# Project configuration
+project({{ project_name }} 
+    VERSION {{ project_version | default("1.0.0") }}
+    DESCRIPTION "{{ project_description | default("A modern C++20 console application") }}"
+    LANGUAGES CXX
+)
+
+# Set C++20 standard
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Output directories
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+
+# Include custom CMake modules
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
+
+# Setup vcpkg integration
+# Ensure VCPKG_ROOT is set in the environment, or vcpkg is available via FetchContent elsewhere
+if(DEFINED ENV{VCPKG_ROOT} AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
+    set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "Vcpkg toolchain file")
+    message(STATUS "Using vcpkg toolchain from VCPKG_ROOT: $ENV{VCPKG_ROOT}")
+elseif(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
+    message(WARNING "VCPKG_ROOT is not set and CMAKE_TOOLCHAIN_FILE is not defined. vcpkg packages might not be found correctly.")
+endif()
+
+# Include VcpkgHelpers for smart package management
+include(VcpkgHelpers)
+
+# Compiler-specific options
+if(MSVC)
+    add_compile_options(/W4 /WX /utf-8)
+    add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
+else()
+    add_compile_options(-Wall -Wextra -Wpedantic -Werror)
+    
+    # Enable additional warnings for GCC/Clang
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        add_compile_options(-Wlogical-op -Wduplicated-cond -Wduplicated-branches)
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        add_compile_options(-Wno-missing-braces)
+    endif()
+endif()
+
+# Build type specific flags
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    add_compile_definitions(DEBUG)
+    if(NOT MSVC)
+        add_compile_options(-g -O0)
+        # Sanitizers are often best enabled per-target or via presets for more control
+        # Consider adding -fsanitize=address,undefined to CMAKE_CXX_FLAGS_DEBUG if globally desired
+    endif()
+elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
+    add_compile_definitions(NDEBUG)
+    if(NOT MSVC)
+        add_compile_options(-O3 -DNDEBUG)
+    endif()
+endif()
+
+# Find all packages from vcpkg.json
+vcpkg_find_packages()
+
+# Create a library for the C++20 module
+# add_library(utils_module_lib STATIC)
+# target_sources(utils_module_lib
+#     PUBLIC
+#         FILE_SET CXX_MODULES FILES
+#         ${CMAKE_CURRENT_SOURCE_DIR}/modules/utils.cppm
+# )
+# target_compile_features(utils_module_lib PUBLIC cxx_std_20)
+
+# Main executable
+add_executable({{ project_name }} main.cpp)
+
+# Link the main executable against our module library
+# target_link_libraries({{ project_name }} PRIVATE utils_module_lib)
+
+# Link libraries from vcpkg
+# This will link all packages found by vcpkg_find_packages()
+# For more granular control, use:
+# vcpkg_link_libraries(TARGET {{ project_name }} LINK_TYPE PRIVATE PACKAGES fmt spdlog)
+vcpkg_link_libraries(TARGET {{ project_name }} LINK_TYPE PRIVATE)
+
+# Standard required libraries (like pthreads)
+find_package(Threads REQUIRED)
+target_link_libraries({{ project_name }} PRIVATE Threads::Threads)
+
+# Include directories
+target_include_directories({{ project_name }}
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR} # For main.cpp if it includes local headers
+        # Add include/{{ project_name }} if you create that structure
+)
+
+# Enable testing
+enable_testing()
+
+# Add tests if test directory exists
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/tests)
+    add_subdirectory(tests)
+endif()
+
+# Installation rules
+install(TARGETS {{ project_name }}
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+)
+
+# CPack configuration for packaging
+set(CPACK_PACKAGE_NAME "{{ project_name }}")
+set(CPACK_PACKAGE_VERSION "{{ project_version | default("1.0.0") }}")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "{{ project_description | default("A modern C++20 console application") }}")
+set(CPACK_PACKAGE_VENDOR "{{ project_author | default("Developer") }}")
+
+include(CPack) 

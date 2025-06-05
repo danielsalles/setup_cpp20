@@ -1,0 +1,421 @@
+# Contributing to {{ project_name }}
+
+Thank you for your interest in contributing to {{ project_name }}! This document provides guidelines and information for contributors.
+
+## 📋 Table of Contents
+
+- [Code of Conduct](#code-of-conduct)
+- [Getting Started](#getting-started)
+- [Development Process](#development-process)
+- [Coding Standards](#coding-standards)
+- [Testing Guidelines](#testing-guidelines)
+- [Documentation](#documentation)
+- [Submitting Changes](#submitting-changes)
+- [Release Process](#release-process)
+
+## 🤝 Code of Conduct
+
+This project adheres to a code of conduct that we expect all contributors to follow:
+
+- **Be respectful**: Treat everyone with respect and kindness
+- **Be inclusive**: Welcome contributors from all backgrounds
+- **Be constructive**: Provide helpful feedback and suggestions
+- **Be patient**: Remember that everyone has different experience levels
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+Before contributing, ensure you have:
+
+- C++20 compatible compiler (GCC 10+, Clang 12+, or MSVC 19.29+)
+- CMake 3.20 or higher
+- vcpkg for dependency management
+- Git for version control
+
+### Setting Up the Development Environment
+
+1. **Fork and clone the repository**:
+   ```bash
+   git clone https://github.com/yourusername/{{ project_name | lower }}.git
+   cd {{ project_name | lower }}
+   ```
+
+2. **Set up vcpkg** (if not already done):
+   ```bash
+   # Clone vcpkg
+   git clone https://github.com/Microsoft/vcpkg.git
+   cd vcpkg
+   ./bootstrap-vcpkg.sh  # or .bat on Windows
+   
+   # Set environment variable
+   export VCPKG_ROOT=/path/to/vcpkg
+   ```
+
+3. **Build the project**:
+   ```bash
+   chmod +x scripts/build.sh
+   ./scripts/build.sh
+   ```
+
+4. **Run tests** to ensure everything works:
+   ```bash
+   cd build && ctest --verbose
+   ```
+
+### Development Tools
+
+We recommend using one of these IDEs:
+
+- **Visual Studio Code** with C/C++ and CMake Tools extensions
+- **CLion** with built-in CMake support
+- **Visual Studio** (Windows) with CMake support
+
+## 🔄 Development Process
+
+### Branching Strategy
+
+We use a simplified Git flow:
+
+- `main`: Stable, production-ready code
+- `develop`: Integration branch for features
+- `feature/feature-name`: Individual feature branches
+- `hotfix/fix-name`: Critical bug fixes
+
+### Workflow
+
+1. **Create an issue** describing the bug or feature
+2. **Fork the repository** (if external contributor)
+3. **Create a feature branch** from `develop`:
+   ```bash
+   git checkout develop
+   git pull origin develop
+   git checkout -b feature/amazing-feature
+   ```
+4. **Make your changes** following our coding standards
+5. **Write tests** for new functionality
+6. **Update documentation** if needed
+7. **Commit your changes** with clear messages
+8. **Push to your fork** and create a Pull Request
+
+### Commit Message Guidelines
+
+Follow the [Conventional Commits](https://www.conventionalcommits.org/) specification:
+
+```
+type(scope): description
+
+[optional body]
+
+[optional footer(s)]
+```
+
+**Types:**
+- `feat`: A new feature
+- `fix`: A bug fix
+- `docs`: Documentation changes
+- `style`: Code style changes (formatting, etc.)
+- `refactor`: Code refactoring
+- `test`: Adding or updating tests
+- `chore`: Maintenance tasks
+
+**Examples:**
+```
+feat(parser): add support for C++20 modules
+fix(build): resolve linking issue with vcpkg dependencies
+docs(readme): update installation instructions
+test(core): add unit tests for utility functions
+```
+
+## 📝 Coding Standards
+
+### C++ Style Guide
+
+We follow modern C++20 best practices:
+
+#### General Principles
+- **RAII**: Use Resource Acquisition Is Initialization
+- **Const correctness**: Mark functions and variables `const` when possible
+- **Smart pointers**: Use `std::unique_ptr`, `std::shared_ptr` instead of raw pointers
+- **Standard library**: Prefer STL over custom implementations
+- **Exception safety**: Write exception-safe code
+
+#### Naming Conventions
+
+```cpp
+// Classes and structs: PascalCase
+class FileManager {
+public:
+    // Public methods: camelCase
+    void processFile(const std::string& filename);
+    
+    // Public members: camelCase
+    int fileCount{0};
+
+private:
+    // Private members: camelCase with underscore suffix
+    std::string currentPath_;
+    bool isInitialized_{false};
+};
+
+// Functions: camelCase
+auto calculateResult(int input) -> double;
+
+// Variables: camelCase
+const auto maxRetries = 5;
+auto fileName = std::string{"example.txt"};
+
+// Constants: SCREAMING_SNAKE_CASE
+constexpr int MAX_BUFFER_SIZE = 1024;
+
+// Namespaces: snake_case
+namespace file_utils {
+    // ...
+}
+```
+
+#### Code Style
+
+```cpp
+// Use auto for type deduction when it improves readability
+auto result = complexFunction();
+auto it = container.begin();
+
+// Use range-based for loops
+for (const auto& item : container) {
+    process(item);
+}
+
+// Use trailing return types for complex types
+template<typename T, typename U>
+auto multiply(T&& t, U&& u) -> decltype(t * u) {
+    return std::forward<T>(t) * std::forward<U>(u);
+}
+
+// Use constexpr and noexcept when appropriate
+constexpr auto square(int x) noexcept -> int {
+    return x * x;
+}
+
+// Prefer string_view for read-only string parameters
+void processText(std::string_view text);
+
+// Use braced initialization
+auto numbers = std::vector<int>{1, 2, 3, 4, 5};
+auto person = Person{"John", 30};
+```
+
+#### Include Guidelines
+
+```cpp
+// Order: C++ standard library, third-party, local
+#include <iostream>
+#include <vector>
+#include <string>
+
+#include <fmt/format.h>
+#include <spdlog/spdlog.h>
+
+#include "{{ project_name | lower }}.hpp"
+#include "utils.hpp"
+```
+
+### CMake Guidelines
+
+- Use modern CMake (3.20+) features
+- Prefer `target_*` commands over global commands
+- Use `find_package` instead of `find_library` when possible
+- Write clear, documented CMake code
+
+```cmake
+# Use modern CMake practices
+cmake_minimum_required(VERSION 3.20)
+
+# Set properties on targets, not globally
+target_compile_features(my_target PRIVATE cxx_std_20)
+target_include_directories(my_target 
+    PRIVATE 
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    PUBLIC 
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+```
+
+## 🧪 Testing Guidelines
+
+### Test Structure
+
+- Place all tests in the `tests/` directory
+- Use descriptive test names and organize with tags
+- Test both positive and negative cases
+- Include edge cases and boundary conditions
+
+### Writing Tests with Catch2
+
+```cpp
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_template_test_macros.hpp>
+
+TEST_CASE("FileManager handles file operations correctly", "[filesystem]") {
+    auto manager = FileManager{};
+    
+    SECTION("Can create new files") {
+        REQUIRE(manager.createFile("test.txt"));
+        REQUIRE(manager.fileExists("test.txt"));
+    }
+    
+    SECTION("Handles non-existent files gracefully") {
+        REQUIRE_FALSE(manager.fileExists("nonexistent.txt"));
+        REQUIRE_THROWS_AS(manager.openFile("nonexistent.txt"), FileNotFoundError);
+    }
+}
+
+// Template tests for generic functionality
+TEMPLATE_TEST_CASE("Container operations work with different types", 
+                   "[containers]", std::vector<int>, std::list<int>) {
+    TestType container{1, 2, 3};
+    REQUIRE(container.size() == 3);
+}
+```
+
+### Test Coverage
+
+- Aim for high test coverage (>90% for new code)
+- Use coverage tools to identify untested code paths
+- Write integration tests for complex interactions
+
+## 📚 Documentation
+
+### Code Documentation
+
+Use Doxygen-style comments for public APIs:
+
+```cpp
+/**
+ * @brief Processes a file and returns the result
+ * 
+ * This function reads the specified file, processes its contents
+ * according to the given parameters, and returns the processed data.
+ * 
+ * @param filename Path to the file to process
+ * @param options Processing options (see ProcessingOptions)
+ * @return ProcessingResult containing the processed data
+ * 
+ * @throws FileNotFoundError if the file doesn't exist
+ * @throws ProcessingError if processing fails
+ * 
+ * @note This function is thread-safe
+ * @since Version 1.2.0
+ * 
+ * @example
+ * @code
+ * auto options = ProcessingOptions{.format = Format::JSON};
+ * auto result = processFile("data.txt", options);
+ * @endcode
+ */
+auto processFile(const std::string& filename, 
+                 const ProcessingOptions& options) -> ProcessingResult;
+```
+
+### README and Documentation Updates
+
+- Update README.md when adding new features
+- Include examples and usage instructions
+- Update API documentation when changing interfaces
+- Keep CHANGELOG.md current with your changes
+
+## 📤 Submitting Changes
+
+### Pull Request Process
+
+1. **Ensure your branch is up to date**:
+   ```bash
+   git checkout develop
+   git pull origin develop
+   git checkout feature/your-feature
+   git rebase develop
+   ```
+
+2. **Run all tests** before submitting:
+   ```bash
+   cd build && ctest --verbose
+   ```
+
+3. **Create a Pull Request** with:
+   - Clear title describing the change
+   - Detailed description of what was changed and why
+   - Link to related issues
+   - Screenshots/examples if applicable
+
+4. **Ensure CI passes** - all automated checks must pass
+
+### Pull Request Template
+
+When creating a PR, include:
+
+```markdown
+## Description
+Brief description of changes made.
+
+## Type of Change
+- [ ] Bug fix (non-breaking change which fixes an issue)
+- [ ] New feature (non-breaking change which adds functionality)
+- [ ] Breaking change (fix or feature that would cause existing functionality to not work as expected)
+- [ ] Documentation update
+
+## Testing
+- [ ] I have added tests that prove my fix is effective or that my feature works
+- [ ] New and existing unit tests pass locally with my changes
+- [ ] I have tested this change on multiple platforms (if applicable)
+
+## Checklist
+- [ ] My code follows the style guidelines of this project
+- [ ] I have performed a self-review of my own code
+- [ ] I have commented my code, particularly in hard-to-understand areas
+- [ ] I have made corresponding changes to the documentation
+- [ ] My changes generate no new warnings
+```
+
+### Code Review Process
+
+- All submissions require review before merging
+- Reviews should be constructive and educational
+- Address all review comments before merging
+- Maintain a professional and respectful tone
+
+## 🚀 Release Process
+
+### Versioning
+
+We follow [Semantic Versioning](https://semver.org/):
+
+- **MAJOR** version: Incompatible API changes
+- **MINOR** version: Backward-compatible functionality additions
+- **PATCH** version: Backward-compatible bug fixes
+
+### Release Workflow
+
+1. Update version numbers in relevant files
+2. Update CHANGELOG.md with release notes
+3. Create and test release builds
+4. Tag the release: `git tag -a v1.0.0 -m "Release version 1.0.0"`
+5. Push tags: `git push origin --tags`
+
+## ❓ Getting Help
+
+If you need help or have questions:
+
+1. **Check existing issues** for similar problems
+2. **Read the documentation** thoroughly
+3. **Ask questions** by creating a new issue with the "question" label
+4. **Join discussions** in existing issues and PRs
+
+## 🙏 Recognition
+
+Contributors will be recognized in:
+
+- Project README.md
+- Release notes
+- CONTRIBUTORS.md file (if applicable)
+
+Thank you for contributing to {{ project_name }}! 

@@ -1,0 +1,275 @@
+#include "library.hpp"
+
+#include <iostream>
+#include <thread>
+#include <algorithm>
+
+#ifdef HAS_SPDLOG
+#include <spdlog/spdlog.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
+#endif
+
+namespace {{ project_name | lower }} {
+
+namespace {
+    // Internal helper functions
+
+    /**
+     * @brief Initialize logging if available
+     */
+    void init_logging() {
+#ifdef HAS_SPDLOG
+        auto logger = spdlog::stdout_color_mt("{{ project_name }}");
+        logger->info("{{ project_name }} library initialized v{}", Version::full);
+#endif
+    }
+    
+    /**
+     * @brief Log a message (internal helper)
+     */
+    void log_info(std::string_view message) {
+#ifdef HAS_SPDLOG
+        if (auto logger = spdlog::get("{{ project_name | lower }}")) {
+            logger->info("{}", message);
+        }
+#else
+        std::cout << "[INFO] " << message << "\n";
+#endif
+    }
+    
+    /**
+     * @brief Log an error (internal helper)
+     */
+    void log_error(std::string_view message) {
+#ifdef HAS_SPDLOG
+        if (auto logger = spdlog::get("{{ project_name | lower }}")) {
+            logger->error("{}", message);
+        }
+#else
+        std::cerr << "[ERROR] " << message << "\n";
+#endif
+    }
+
+} // anonymous namespace
+
+// Static initialization
+static bool library_initialized = []() {
+    init_logging();
+    return true;
+}();
+
+// Error to string conversion
+std::string to_string(Error error) {
+    switch (error) {
+        case Error::None: return "No error";
+        case Error::InvalidInput: return "Invalid input";
+        case Error::OutOfRange: return "Out of range";
+        case Error::NotFound: return "Not found";
+        case Error::InternalError: return "Internal error";
+        default: return "Unknown error";
+    }
+}
+
+// Utility functions implementation
+
+/**
+ * @brief Validate numeric range using the 'Numeric' C++20 concept.
+ */
+template<Numeric T>
+bool validate_range(T value, T min_val, T max_val) {
+    return value >= min_val && value <= max_val;
+}
+
+/**
+ * @brief Safe division function that returns a Result (std::expected-like) to handle potential errors.
+ * Demonstrates error handling using C++23 std::expected features.
+ */
+template<Numeric T>
+Result<T> safe_divide(T numerator, T denominator) {
+    if (denominator == T{}) {
+        log_error("Division by zero attempted");
+        return std::unexpected(Error::InvalidInput);
+    }
+    return numerator / denominator;
+}
+
+/**
+ * @brief Calculate statistics for a range of numeric values.
+ * Uses C++20 std::ranges for iterating input and std::expected for the result type.
+ */
+template<std::ranges::input_range Range>
+requires Numeric<std::ranges::range_value_t<Range>>
+struct Statistics {
+    using ValueType = std::ranges::range_value_t<Range>;
+    
+    ValueType min;
+    ValueType max;
+    ValueType sum;
+    double average;
+    size_t count;
+    
+    static Result<Statistics> calculate(Range&& range) {
+        if (std::ranges::empty(range)) {
+            return std::unexpected(Error::InvalidInput);
+        }
+        
+        auto it = std::ranges::begin(range);
+        auto end = std::ranges::end(range);
+        
+        Statistics stats{};
+        stats.min = stats.max = stats.sum = *it;
+        stats.count = 1;
+        
+        ++it;
+        while (it != end) {
+            ValueType value = *it;
+            stats.min = std::min(stats.min, value);
+            stats.max = std::max(stats.max, value);
+            stats.sum += value;
+            ++stats.count;
+            ++it;
+        }
+        
+        stats.average = static_cast<double>(stats.sum) / static_cast<double>(stats.count);
+        
+        return stats;
+    }
+    
+    std::string to_string() const {
+#ifdef HAS_FMT
+        return fmt::format("Statistics: min={}, max={}, sum={}, avg={:.2f}, count={}", 
+                          min, max, sum, average, count);
+#else
+        return "Statistics: min=" + std::to_string(min) + 
+               ", max=" + std::to_string(max) + 
+               ", sum=" + std::to_string(sum) + 
+               ", avg=" + std::to_string(average) + 
+               ", count=" + std::to_string(count);
+#endif
+    }
+};
+
+/**
+ * @brief Process data with parallel execution support.
+ * Converts the input C++20 range to a std::vector for easier chunking with std::thread.
+ */
+template<std::ranges::input_range Range, typename Func>
+requires std::invocable<Func, std::ranges::range_value_t<Range>>
+auto parallel_process(Range&& range, Func&& func, size_t thread_count = std::thread::hardware_concurrency()) {
+    using ValueType = std::ranges::range_value_t<Range>;
+    using ResultType = std::invoke_result_t<Func, ValueType>;
+    
+    std::vector<ValueType> input_data(std::ranges::begin(range), std::ranges::end(range));
+    std::vector<ResultType> results(input_data.size());
+    
+    if (input_data.empty()) {
+        return results;
+    }
+    
+    // For small datasets, don't use threading overhead
+    if (input_data.size() < 100 || thread_count <= 1) {
+        std::transform(input_data.begin(), input_data.end(), results.begin(), func);
+        return results;
+    }
+    
+    // Parallel processing
+    const size_t chunk_size = input_data.size() / thread_count;
+    std::vector<std::thread> threads;
+    threads.reserve(thread_count);
+    
+    for (size_t i = 0; i < thread_count; ++i) {
+        size_t start = i * chunk_size;
+        size_t end = (i == thread_count - 1) ? input_data.size() : (i + 1) * chunk_size;
+        
+        threads.emplace_back([&, start, end]() {
+            for (size_t j = start; j < end; ++j) {
+                results[j] = func(input_data[j]);
+            }
+        });
+    }
+    
+    // Wait for all threads to complete
+    for (auto& thread : threads) {
+        thread.join();
+    }
+    
+    return results;
+}
+
+// Implementation for the example function using C++20 std::span
+// std::span provides a non-owning, type-safe view into a contiguous sequence.
+long long sum_span_elements(std::span<const int> data_span) {
+    long long current_sum = 0;
+    // Iterating directly over the span, which is efficient and safe.
+    for (int element : data_span) {
+        current_sum += element;
+    }
+    // Optional: Log the operation if logging is setup
+    // log_info(fmt::format("Summed {} elements from span, result: {}", data_span.size(), current_sum));
+    return current_sum;
+}
+
+// Explicit instantiations for common types
+template class Calculator<int>;
+template class Calculator<double>;
+template class Calculator<float>;
+
+// Function to get library information with build details
+std::string get_build_info() {
+    std::string info = get_info();
+    
+#ifdef DEBUG
+    info += " (Debug build)";
+#else
+    info += " (Release build)";
+#endif
+
+#ifdef HAS_FMT
+    info += " [with fmt]";
+#endif
+
+#ifdef HAS_SPDLOG
+    info += " [with spdlog]";
+#endif
+    
+    info += " [C++20]";
+    
+    return info;
+}
+
+/**
+ * @brief Demonstrate library capabilities
+ */
+void demonstrate_features() {
+    log_info("Demonstrating {{ project_name }} library features");
+    
+    // Test Calculator
+    auto calc = make_calculator(10.0);
+    calc.add(5).multiply(2).subtract(3);
+    
+    log_info("Calculator result: " + calc.to_string());
+    
+    // Test ranges processing
+    std::vector<int> numbers{1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+    auto squares = process_range(numbers, [](int x) { return x * x; });
+    
+#ifdef HAS_FMT
+    log_info(fmt::format("Squares: {}", squares));
+#else
+    std::string squares_str = "Squares: ";
+    for (size_t i = 0; i < squares.size(); ++i) {
+        if (i > 0) squares_str += ", ";
+        squares_str += std::to_string(squares[i]);
+    }
+    log_info(squares_str);
+#endif
+    
+    // Test statistics
+    if (auto stats = Statistics<std::vector<int>>::calculate(numbers)) {
+        log_info("Number statistics: " + stats->to_string());
+    }
+    
+    log_info("{{ project_name }} library demonstration completed");
+}
+
+} // namespace {{ project_name | lower }} 
