@@ -261,8 +261,8 @@ download_shared_templates() {
     
     # Download critical shared files
     local shared_files=(
-        "cmake/CompilerWarnings.cmake.template"
-        "cmake/VcpkgHelpers.cmake.template"
+        "cmake/CompilerWarnings.cmake"
+        "cmake/VcpkgHelpers.cmake"
         "scripts/build.sh.template"
         "scripts/test.sh.template"
         ".clang-format.template"

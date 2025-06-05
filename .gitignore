@@ -19,7 +19,7 @@ install_manifest.txt
 Makefile
 *.cmake
 !CMakeLists.txt
-!cmake/*.cmake
+!templates/shared/cmake/*.cmake
 
 # Ninja build files
 .ninja_deps
