@@ -140,7 +140,7 @@ download_template_system() {
     # Create temporary directory
     TEMP_DIR=$(mktemp -d)
     
-    # Download template processor
+    # Download template processor first
     print_info "Downloading template_processor.py..."
     if ! curl -fsSL "$REPO_BASE/helpers/template_processor.py" -o "$TEMP_DIR/template_processor.py"; then
         print_error "Failed to download template processor"
@@ -150,8 +150,54 @@ download_template_system() {
     # Update the template processor path to use temp directory
     TEMPLATE_PROCESSOR="$TEMP_DIR/template_processor.py"
     
-    # Download templates directory structure
-    print_info "Downloading templates..."
+    # Try to download entire repository as ZIP (more robust)
+    print_info "Downloading complete template system from repository..."
+    
+    local repo_zip="$TEMP_DIR/setup_cpp20.zip"
+    local extract_dir="$TEMP_DIR/extract"
+    
+    # Download repository ZIP
+    if curl -fsSL "https://github.com/danielsalles/setup_cpp20/archive/main.zip" -o "$repo_zip" 2>/dev/null; then
+        print_info "Repository archive downloaded successfully"
+        
+        # Extract ZIP file
+        print_info "Extracting templates..."
+        mkdir -p "$extract_dir"
+        
+        if command -v unzip >/dev/null 2>&1; then
+            if unzip -q "$repo_zip" -d "$extract_dir" 2>/dev/null; then
+                # Check if templates directory exists in extracted content
+                if [[ -d "$extract_dir/setup_cpp20-main/templates" ]]; then
+                    TEMPLATES_DIR="$extract_dir/setup_cpp20-main/templates"
+                    print_success "Template system downloaded and extracted successfully"
+                    
+                    # Cleanup ZIP file
+                    rm -f "$repo_zip"
+                    return 0
+                else
+                    print_warning "Templates directory not found in archive"
+                fi
+            else
+                print_warning "Failed to extract repository archive"
+            fi
+        else
+            print_warning "unzip command not available"
+        fi
+        
+        # Cleanup failed ZIP
+        rm -f "$repo_zip"
+    else
+        print_warning "Failed to download repository archive"
+    fi
+    
+    # Fallback: download templates individually
+    print_info "Falling back to individual file downloads..."
+    download_templates_individually
+}
+
+# Fallback function for individual file downloads
+download_templates_individually() {
+    print_info "Downloading templates individually..."
     
     # Create templates directory in temp
     mkdir -p "$TEMP_DIR/templates"
@@ -166,7 +212,7 @@ download_template_system() {
     # Download shared templates
     download_shared_templates
     
-    print_success "Template system downloaded successfully"
+    print_success "Template system downloaded individually"
 }
 
 # Function to download template files for a specific project type

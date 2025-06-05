@@ -39,6 +39,44 @@ log_warning() { echo -e "${YELLOW}⚠️  $*${NC}"; }
 log_error() { echo -e "${RED}❌ $*${NC}" >&2; }
 log_header() { echo -e "${PURPLE}🚀 $*${NC}"; }
 
+# Show help function
+show_help() {
+    show_banner
+    echo -e "${CYAN}📚 USAGE${NC}"
+    echo "  $0 <project-name> [project-type] [options]"
+    echo
+    echo -e "${CYAN}📝 ARGUMENTS${NC}"
+    echo "  project-name    Name of the C++20 project to create"
+    echo "  project-type    Type of project: console (default) or library"
+    echo
+    echo -e "${CYAN}⚙️  OPTIONS${NC}"
+    echo "  -h, --help     Show this help message"
+    echo
+    echo -e "${CYAN}💡 EXAMPLES${NC}"
+    echo "  $0 my-app                    # Create console application"
+    echo "  $0 my-lib library            # Create library project"
+    echo "  $0 hello-world console       # Create console app explicitly"
+    echo
+    echo -e "${CYAN}📋 FEATURES${NC}"
+    echo "  ✅ Modern C++20 with concepts and ranges"
+    echo "  ✅ CMake 3.25+ with modern practices"
+    echo "  ✅ vcpkg integration for package management"
+    echo "  ✅ Catch2 testing framework"
+    echo "  ✅ Comprehensive development scripts"
+    echo "  ✅ Cross-platform compatibility"
+    echo "  ✅ Template-based code generation with Jinja2"
+    echo
+    echo -e "${CYAN}📦 REQUIREMENTS${NC}"
+    echo "  • Python 3.6+ with Jinja2: pip install jinja2"
+    echo "  • CMake 3.25+ and Ninja build system"
+    echo "  • Modern C++20 compiler (GCC 11+, Clang 13+, MSVC 2022+)"
+    echo
+    echo -e "${CYAN}🔗 MORE INFO${NC}"
+    echo "  Repository: https://github.com/danielsalles/setup_cpp20"
+    echo "  Templates:  Uses Jinja2 for modern template processing"
+    echo
+}
+
 # Cleanup function
 cleanup() {
     if [[ -n "${TEMP_DIR:-}" && -d "$TEMP_DIR" ]]; then
@@ -101,7 +139,7 @@ check_template_system() {
 download_template_system() {
     log_info "Downloading template processing system..."
     
-    # Download template processor
+    # Download template processor first
     log_info "Downloading template_processor.py..."
     if ! curl -fsSL "$REPO_BASE/helpers/template_processor.py" -o "$TEMP_DIR/template_processor.py"; then
         log_error "Failed to download template processor"
@@ -111,8 +149,54 @@ download_template_system() {
     # Update the template processor path to use temp directory
     TEMPLATE_PROCESSOR="$TEMP_DIR/template_processor.py"
     
-    # Download templates directory structure
-    log_info "Downloading templates..."
+    # Try to download entire repository as ZIP (more robust)
+    log_info "Downloading complete template system from repository..."
+    
+    local repo_zip="$TEMP_DIR/setup_cpp20.zip"
+    local extract_dir="$TEMP_DIR/extract"
+    
+    # Download repository ZIP
+    if curl -fsSL "https://github.com/danielsalles/setup_cpp20/archive/main.zip" -o "$repo_zip" 2>/dev/null; then
+        log_info "Repository archive downloaded successfully"
+        
+        # Extract ZIP file
+        log_info "Extracting templates..."
+        mkdir -p "$extract_dir"
+        
+        if command -v unzip >/dev/null 2>&1; then
+            if unzip -q "$repo_zip" -d "$extract_dir" 2>/dev/null; then
+                # Check if templates directory exists in extracted content
+                if [[ -d "$extract_dir/setup_cpp20-main/templates" ]]; then
+                    TEMPLATES_DIR="$extract_dir/setup_cpp20-main/templates"
+                    log_success "Template system downloaded and extracted successfully"
+                    
+                    # Cleanup ZIP file
+                    rm -f "$repo_zip"
+                    return 0
+                else
+                    log_warning "Templates directory not found in archive"
+                fi
+            else
+                log_warning "Failed to extract repository archive"
+            fi
+        else
+            log_warning "unzip command not available"
+        fi
+        
+        # Cleanup failed ZIP
+        rm -f "$repo_zip"
+    else
+        log_warning "Failed to download repository archive"
+    fi
+    
+    # Fallback: download templates individually
+    log_info "Falling back to individual file downloads..."
+    download_templates_individually
+}
+
+# Fallback function for individual file downloads
+download_templates_individually() {
+    log_info "Downloading templates individually..."
     
     # Create templates directory in temp
     mkdir -p "$TEMP_DIR/templates"
@@ -127,7 +211,7 @@ download_template_system() {
     # Download shared templates
     download_shared_templates
     
-    log_success "Template system downloaded successfully"
+    log_success "Template system downloaded individually"
 }
 
 download_template_files() {
@@ -850,6 +934,16 @@ COMPLETION_EOF
 }
 
 main() {
+    # Check for help argument first
+    for arg in "$@"; do
+        case $arg in
+            -h|--help)
+                show_help
+                exit 0
+                ;;
+        esac
+    done
+    
     show_banner
     check_template_system
     get_project_info
